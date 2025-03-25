@@ -8,11 +8,10 @@ import torch
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
-from pytorch_lightning.utilities.rank_zero import rank_zero_only
 from scipy import stats
 
-from jh.config.margin_rate import MARGIN_RATE
-from jh.misc.unit import UWON
+from config.margin_rate import MARGIN_RATE
+from misc.unit import UWON
 
 # TODO: validate pd.DataFrame columns and values
 
@@ -34,7 +33,6 @@ class BacktesterCallback(L.Callback):
         val_items = [pl_module.val_cache[key].cpu() for key in keys]
         return train_items, val_items
 
-    @rank_zero_only
     def on_validation_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
         if trainer.current_epoch == 0:
             return

@@ -1,5 +1,12 @@
+from enum import Enum
+
 import torch
 import torch.nn as nn
+
+
+class LossType(str, Enum):
+    FOCAL = "focal_loss"
+    L1 = "l1_loss"
 
 
 class FocalLoss(nn.Module):

@@ -1,13 +1,11 @@
-from jh.preprocess.preprocessor import BasicPreprocessor
-from jh.preprocess.raw_preprocessing_module import TimeConverter, VolumeExtractor
-from jh.preprocess.resample_preprocessing_module import DeltaExtractor, OHLCVExtractor
+from preprocess.preprocessor import BasicPreprocessor
+from preprocess.raw_preprocessing_module import TimeConverter, VolumeExtractor
+from preprocess.resample_preprocessing_module import DeltaExtractor, OHLCVExtractor
 
 if __name__ == "__main__":
     raw_preprocessing_pipeline = [
         TimeConverter("time", set_index_and_sort=True),
-        VolumeExtractor(
-            "future_long", "future_short", "future_cumulative_volume", "future_volume"
-        ),
+        VolumeExtractor("future_long", "future_short", "future_cumulative_volume", "future_volume"),
     ]
     resample_preprocessing_pipeline = [
         DeltaExtractor("future_price", "future_price"),

@@ -6,8 +6,8 @@ import ray
 from ray.util import ActorPool
 from tqdm import tqdm
 
-from jh.preprocess.raw_preprocessing_module import RawPreprocessingModuleBase
-from jh.preprocess.resample_preprocessing_module import ResamplePreprocessingModuleBase
+from preprocess.raw_preprocessing_module import RawPreprocessingModuleBase
+from preprocess.resample_preprocessing_module import ResamplePreprocessingModuleBase
 
 ResampleRule = Literal["1min", "5min", "15min", "1h"]
 
@@ -38,9 +38,7 @@ class BasicPreprocessor:
             raw_df = self._read_hdf_with_path(hdf_fp)
 
             raw_preprocessed_df = self._run_raw_preprocessing_pipeline(raw_df)
-            resample_preprocessed_df = self._run_resample_preprocessing_pipeline(
-                raw_preprocessed_df
-            )
+            resample_preprocessed_df = self._run_resample_preprocessing_pipeline(raw_preprocessed_df)
             final_df = self._flatten_columns(resample_preprocessed_df)
 
             return final_df
@@ -69,9 +67,7 @@ class BasicPreprocessor:
             return resample_preprocessed_df
 
         def _flatten_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-            df.columns = [
-                "_".join(col) if isinstance(col, tuple) else col for col in df.columns
-            ]
+            df.columns = ["_".join(col) if isinstance(col, tuple) else col for col in df.columns]
             return df
 
     def __init__(

@@ -1,9 +1,8 @@
 import lightning as L
 
-from jh.datamodule import BasicDataModule, BasicDataset
-from jh.datamodule.dataset import ConsecutiveCandleDataset
-from jh.model.callback import BacktesterCallback
-from jh.model.dlinear import DLinearModel
+from datamodule import BasicDataModule, ConsecutiveCandleDataset
+from model.callback import BacktesterCallback
+from model.dlinear import DLinearModel
 
 if __name__ == "__main__":
     debug = False
