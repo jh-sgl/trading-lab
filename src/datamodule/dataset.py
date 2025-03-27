@@ -6,7 +6,10 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
+from util.registry import register_dataset
 
+
+@register_dataset("Basic")
 class BasicDataset(Dataset):
     def __init__(
         self,
@@ -94,6 +97,7 @@ class BasicDataset(Dataset):
         return len(self._data) - self._lookback_window - 1  # subtract 1 for label indexing
 
 
+@register_dataset("ConsecutiveCandle")
 class ConsecutiveCandleDataset(BasicDataset):
     def __init__(
         self,

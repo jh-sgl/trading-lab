@@ -72,7 +72,7 @@ class DLinear(nn.Module):
     def _to_pred(self, output: torch.Tensor) -> torch.Tensor:
         output = output.view(output.shape[0], -1)
         output = self._dropout(output)
-        pred = self._linear_predictor(output).squeeze()
+        pred = self._linear_predictor(output).squeeze(-1)
         return pred
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

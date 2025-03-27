@@ -1,27 +1,19 @@
 from enum import Enum
-from typing import Any, Literal
 
 import lightning as L
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torchmetrics as tm
+from omegaconf import DictConfig
 from torch.optim import Optimizer
 
-from model.common.loss import FocalLoss
-from model.dlinear.network import DLinear
+from util.registry import build_loss_func, register_model
 
-CacheDict = dict[str, list[torch.Tensor] | torch.Tensor]
-
-
-class CacheKey(str, Enum):
-    OUTPUT = "output"
-    LABEL_TS = "label_ts"
-    LABEL_PRICE_OPEN = "label_price_open"
-    LABEL_PRICE_CLOSE = "label_price_close"
-    DECISION = "decision"
+from .const import CacheDict, CacheKey
+from .network import DLinear
 
 
+@register_model("DLinear")
 class DLinearModel(L.LightningModule):
     def __init__(
         self,
@@ -30,15 +22,14 @@ class DLinearModel(L.LightningModule):
         input_ch: int,
         moving_avg_kernel_size: int,
         lr: float,
-        loss_func: Literal[LossType.FOCAL, LossType.L1],
-        loss_func_args: dict[str, Any] = {},
+        loss_func: DictConfig,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
 
         self._network = DLinear(seq_len, pred_len, input_ch, moving_avg_kernel_size)
         self._lr = lr
-        self._loss_func = self._build_loss_func(loss_func, loss_func_args)
+        self._loss_func = build_loss_func(loss_func)
 
         self._train_cache = self._init_cache()
         self._val_cache = self._init_cache()
@@ -48,16 +39,7 @@ class DLinearModel(L.LightningModule):
         cache = {}
         for k in self._cache_keys:
             cache[k] = []
-            cache[f"{k}_sorted"] = []
         return cache
-
-    def _build_loss_func(self, name: Literal["focal_loss", "l1_loss"], args: dict[str, Any]) -> nn.Module:
-        if name == "focal_loss":
-            return FocalLoss(**args)
-        elif name == "l1_loss":
-            return nn.L1Loss(**args)
-        else:
-            raise ValueError(f"Unsupported loss function: {name}")
 
     def _should_cache_train(self) -> bool:
         return self.trainer.current_epoch % self.trainer.check_val_every_n_epoch == 0
@@ -77,7 +59,6 @@ class DLinearModel(L.LightningModule):
             CacheKey.LABEL_TS,
             CacheKey.LABEL_PRICE_OPEN,
             CacheKey.LABEL_PRICE_CLOSE,
-            CacheKey.DECISION,
         ]
 
     def _compute_loss(self, output: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
@@ -90,7 +71,7 @@ class DLinearModel(L.LightningModule):
         return label_batch
 
     def _forward_pass(self, x: torch.Tensor) -> torch.Tensor:
-        return F.softmax(self._network(x), dim=1)
+        return self._network(x).softmax(dim=1)
 
     def _maybe_cache(
         self,
@@ -105,9 +86,6 @@ class DLinearModel(L.LightningModule):
             cache[CacheKey.LABEL_TS].append(label_ts)
             cache[CacheKey.LABEL_PRICE_OPEN].append(label_price_open)
             cache[CacheKey.LABEL_PRICE_CLOSE].append(label_price_close)
-
-    def _clear_cache(self, cache: CacheDict) -> None:
-        cache.update({k: [] for k in cache})
 
     def _step(self, batch, cache: CacheDict | None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         (
@@ -144,10 +122,10 @@ class DLinearModel(L.LightningModule):
         return optim
 
     def on_train_epoch_start(self) -> None:
-        self._clear_cache(self._train_cache)
+        self._train_cache = self._init_cache()
 
     def on_validation_epoch_start(self) -> None:
-        self._clear_cache(self._val_cache)
+        self._val_cache = self._init_cache()
 
     def _process_cache(
         self,
@@ -161,15 +139,16 @@ class DLinearModel(L.LightningModule):
 
         cache[CacheKey.DECISION] = self._output_to_decision(cache[output_key])
 
-        sorted_key = ts_key + "_sorted"
-        cache[sorted_key], sort_idx = cache[ts_key].flatten().sort()
-        for key in cache.keys() - {sorted_key}:
-            cache[key + "_sorted"] = cache[key].flatten()[sort_idx]
+        cache[ts_key], sort_idx = cache[ts_key].flatten().sort()
+        for key in cache.keys() - {ts_key}:
+            cache[key] = cache[key].flatten()[sort_idx]
 
     def on_validation_epoch_end(self) -> None:
-        if self.trainer.current_epoch > 0:
-            self._process_cache(self._train_cache)
-            self._process_cache(self._val_cache)
+        if self.trainer.sanity_checking:
+            return
+
+        self._process_cache(self._train_cache)
+        self._process_cache(self._val_cache)
 
     def _output_to_decision(self, output: torch.Tensor) -> torch.Tensor:
         return output[:, -1] - output[:, 0]

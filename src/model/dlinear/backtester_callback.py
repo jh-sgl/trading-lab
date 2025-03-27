@@ -1,4 +1,5 @@
-from typing import Any, Self
+import os
+from typing import Any, Literal, Self
 
 import lightning as L
 import matplotlib.pyplot as plt
@@ -10,69 +11,12 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
-from config.margin_rate import MARGIN_RATE
-from misc.unit import UWON
+from const.margin_rate import MARGIN_RATE
+from const.unit import UWON
+from util.registry import register_callback
 
-# TODO: validate pd.DataFrame columns and values
-
-
-class BacktesterCallback(L.Callback):
-    def __init__(
-        self,
-        tick_slippage_size: float = 0.05,
-        commission_rate: float = 0.000029,
-        price_multiplier: int = 250_000,
-        initial_balance: int = 50_000_000,
-    ) -> None:
-        super().__init__()
-        self._backtester = BasicBacktester(tick_slippage_size, commission_rate, price_multiplier)
-        self._trading_stats = TradingStats(price_multiplier, initial_balance)
-
-    def _get_cache_items(self, pl_module: L.LightningModule, keys: list[str]) -> list[torch.Tensor]:
-        train_items = [pl_module.train_cache[key].cpu() for key in keys]
-        val_items = [pl_module.val_cache[key].cpu() for key in keys]
-        return train_items, val_items
-
-    def on_validation_end(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
-        if trainer.current_epoch == 0:
-            return
-
-        (train_decision, train_price_idx_enter, train_price_idx_exit, train_label_timestamp), (
-            val_decision,
-            val_price_idx_enter,
-            val_price_idx_exit,
-            val_label_timestamp,
-        ) = self._get_cache_items(
-            pl_module,
-            ["decision_sorted", "label_price_open_sorted", "label_price_close_sorted", "label_timestamp_sorted"],
-        )
-
-        decision, price_idx_enter, price_idx_exit, label_timestamp = (
-            torch.cat([train_decision, val_decision]),
-            torch.cat([train_price_idx_enter, val_price_idx_enter]),
-            torch.cat([train_price_idx_exit, val_price_idx_exit]),
-            torch.cat([train_label_timestamp, val_label_timestamp]),
-        )
-
-        backtest_result = self._backtester.run_backtest(decision, price_idx_enter, price_idx_exit, label_timestamp)
-        stats = self._trading_stats.calc_stats(backtest_result)
-        save_fp = f"{trainer.log_dir}/E{trainer.current_epoch:04d}_O{stats.o_ratio:.3f}_S{stats.sharpe_ratio:.3f}"
-        plotter = ResultPlotter(stats)
-        plotter.draw_result(save_fp=save_fp + ".png")
-        backtest_result.to_parquet(save_fp + ".parquet")
-
-        backtest_result_costless = self._backtester.run_backtest(
-            decision,
-            price_idx_enter,
-            price_idx_exit,
-            label_timestamp,
-            ignore_cost=True,
-        )
-        stats_costless = self._trading_stats.calc_stats(backtest_result_costless)
-        save_fp_costless = f"{trainer.log_dir}/E{trainer.current_epoch:04d}_O{stats_costless.o_ratio:.3f}_S{stats_costless.sharpe_ratio:.3f}_costless"
-        plotter_costless = ResultPlotter(stats_costless)
-        plotter_costless.draw_result(save_fp=save_fp_costless + ".png")
-        backtest_result_costless.to_parquet(save_fp_costless + ".parquet")
+from .const import CacheDict, CacheKey
+from .model import DLinearModel
 
 
 class TradingStats:
@@ -142,7 +86,7 @@ class TradingStats:
     def _calc_account(self, backtest_result: pd.DataFrame) -> pd.DataFrame:
         dailymax_balance = (
             backtest_result.groupby(pd.Grouper(freq="D"))
-            .apply(lambda x: (x.contract_size.cumsum() * x.price_idx_enter * self._price_multiplier / UWON).abs().max())
+            .apply(lambda x: (x.contract_size.cumsum() * x.price_enter * self._price_multiplier / UWON).abs().max())
             .rename("dailymax_balance")
         )
         # TODO: check difference between 'position_size' of the original codes
@@ -239,6 +183,92 @@ class TradingStats:
         return self
 
 
+@register_callback("DLinearBacktester")
+class DLinearBacktesterCallback(L.Callback):
+    def __init__(
+        self,
+        tick_slippage_size: float = 0.05,
+        commission_rate: float = 0.000029,
+        price_multiplier: int = 250_000,
+        initial_balance: int = 50_000_000,
+    ) -> None:
+        super().__init__()
+        self._backtester = BasicBacktester(tick_slippage_size, commission_rate, price_multiplier)
+        self._trading_stats = TradingStats(price_multiplier, initial_balance)
+
+    def _extract_cache(self, cache: CacheDict, keys: list[CacheKey], to_cpu: bool = True) -> list[torch.Tensor]:
+        return [cache[key].cpu() if to_cpu else cache[key] for key in keys]
+
+    def on_validation_end(self, trainer: L.Trainer, pl_module: DLinearModel) -> None:
+        if trainer.sanity_checking:
+            return
+
+        keys = [
+            CacheKey.LABEL_TS,
+            CacheKey.LABEL_PRICE_OPEN,
+            CacheKey.LABEL_PRICE_CLOSE,
+            CacheKey.DECISION,
+        ]
+
+        train_label_ts, train_price_enter, train_price_exit, train_decision = self._extract_cache(
+            pl_module.train_cache, keys, to_cpu=True
+        )
+        val_label_ts, val_price_enter, val_price_exit, val_decision = self._extract_cache(
+            pl_module.val_cache, keys, to_cpu=True
+        )
+
+        total_decision, total_price_enter, total_price_exit, total_label_ts = [
+            torch.cat((t, v))
+            for t, v in [
+                (train_decision, val_decision),
+                (train_price_enter, val_price_enter),
+                (train_price_exit, val_price_exit),
+                (train_label_ts, val_label_ts),
+            ]
+        ]
+        self._run(trainer, train_decision, train_price_enter, train_price_exit, train_label_ts, False, "TRAIN")
+        self._run(trainer, train_decision, train_price_enter, train_price_exit, train_label_ts, True, "TRAIN-COSTLESS")
+        self._run(trainer, val_decision, val_price_enter, val_price_exit, val_label_ts, False, "VALID")
+        self._run(trainer, val_decision, val_price_enter, val_price_exit, val_label_ts, True, "VALID-COSTLESS")
+        self._run(trainer, total_decision, total_price_enter, total_price_exit, total_label_ts, False, "TOTAL")
+        self._run(trainer, total_decision, total_price_enter, total_price_exit, total_label_ts, True, "TOTAL-COSTLESS")
+
+    def _setup_save(
+        self, trainer_log_dir: str, save_suffix: str, current_epoch: int, stats: TradingStats
+    ) -> tuple[str, str]:
+        plot_save_dir = f"{trainer_log_dir}/plot/E{current_epoch:04d}"
+        df_save_dir = f"{trainer_log_dir}/backtest_dataframe/E{current_epoch:04d}"
+        os.makedirs(plot_save_dir, exist_ok=True)
+        os.makedirs(df_save_dir, exist_ok=True)
+        save_filename = f"O{stats.o_ratio:.3f}_S{stats.sharpe_ratio:.3f}_[{save_suffix}]"
+        plot_save_fp = f"{plot_save_dir}/{save_filename}" + ".png"
+        backtest_dataframe_fp = f"{df_save_dir}/{save_filename}" + ".parquet"
+        return plot_save_fp, backtest_dataframe_fp
+
+    def _run(
+        self,
+        trainer: L.Trainer,
+        decision: torch.Tensor,
+        price_enter: torch.Tensor,
+        price_exit: torch.Tensor,
+        label_ts: torch.Tensor,
+        ignore_cost: bool,
+        save_suffix: Literal["TRAIN", "VALID", "TOTAL", "TRAIN-COSTLESS", "VALID-COSTLESS", "TOTAL-COSTLESS"],
+    ) -> None:
+
+        backtest_result = self._backtester.run_backtest(
+            decision, price_enter, price_exit, label_ts, ignore_cost=ignore_cost
+        )
+        stats = self._trading_stats.calc_stats(backtest_result)
+        plot_save_fp, backtest_dataframe_fp = self._setup_save(
+            trainer.log_dir, save_suffix, trainer.current_epoch, stats
+        )
+
+        plotter = ResultPlotter(stats)
+        plotter.draw_result(save_fp=plot_save_fp)
+        backtest_result.to_parquet(backtest_dataframe_fp)
+
+
 class BasicBacktester:
     def __init__(
         self,
@@ -272,12 +302,12 @@ class BasicBacktester:
     def _calc_profit(
         self,
         contract_size: torch.Tensor,
-        price_idx_enter: torch.Tensor,
-        price_idx_exit: torch.Tensor,
+        price_enter: torch.Tensor,
+        price_exit: torch.Tensor,
         contract_cost: torch.Tensor,
         apply_price_multiplier: bool,
     ) -> torch.Tensor:
-        profit = (price_idx_exit - price_idx_enter) * contract_size - contract_cost
+        profit = (price_exit - price_enter) * contract_size - contract_cost
         if apply_price_multiplier:
             profit *= self._price_multiplier
         return profit
@@ -288,7 +318,7 @@ class BasicBacktester:
         decision: torch.Tensor,
         contract_size: torch.Tensor,
         contract_cost: torch.Tensor,
-        price_idx_enter: torch.Tensor,
+        price_enter: torch.Tensor,
         profit: torch.Tensor,
     ) -> pd.DataFrame:
         result_df = pd.DataFrame()
@@ -299,7 +329,7 @@ class BasicBacktester:
         result_df["decision"] = decision.numpy()
         result_df["contract_size"] = contract_size.numpy()
         result_df["contract_cost"] = contract_cost.numpy()
-        result_df["price_idx_enter"] = price_idx_enter.numpy()
+        result_df["price_enter"] = price_enter.numpy()
         result_df["profit"] = profit.numpy()
         result_df["profit_uwon"] = profit / UWON
         return result_df
@@ -307,20 +337,18 @@ class BasicBacktester:
     def run_backtest(
         self,
         decision: torch.Tensor,
-        price_idx_enter: torch.Tensor,
-        price_idx_exit: torch.Tensor,
+        price_enter: torch.Tensor,
+        price_exit: torch.Tensor,
         timestamp: torch.Tensor,
         ignore_cost: bool = False,
     ) -> pd.DataFrame:
         contract_size = self._calc_contract_size(decision)
-        contract_cost = self._calc_contract_cost(contract_size, price_idx_enter, ignore_cost)
+        contract_cost = self._calc_contract_cost(contract_size, price_enter, ignore_cost)
 
-        profit = self._calc_profit(
-            contract_size, price_idx_enter, price_idx_exit, contract_cost, apply_price_multiplier=True
-        )
+        profit = self._calc_profit(contract_size, price_enter, price_exit, contract_cost, apply_price_multiplier=True)
 
         backtest_result = self._create_result_dataframe(
-            timestamp, decision, contract_size, contract_cost, price_idx_enter, profit
+            timestamp, decision, contract_size, contract_cost, price_enter, profit
         )
 
         return backtest_result
@@ -550,4 +578,5 @@ class ResultPlotter:
         plt.close()
 
     def save(self, fig: Figure, save_fp: str) -> None:
+        os.makedirs(os.path.dirname(save_fp), exist_ok=True)
         fig.savefig(save_fp)

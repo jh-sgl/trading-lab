@@ -1,0 +1,61 @@
+defaults:
+  - _self_
+
+data_fp: data/preprocessed_jh/v2.parquet
+input_columns:
+  - future_price_delta
+label_columns:
+  - future_price_delta
+lookback_window: 100
+
+model:
+  name: DLinear
+  args:
+    seq_len: ${lookback_window}
+    pred_len: 24
+    input_ch: ${len:${input_columns}}
+    moving_avg_kernel_size: 25
+    lr: 1e-5
+    loss_func:
+      name: Focal
+      args: {}
+      
+datamodule:
+  name: Basic
+  args:
+    train_batch_size: 512
+    train_num_workers: 48
+    val_batch_size: 512
+    val_num_workers: 48
+
+    train_dataset:
+      name: ConsecutiveCandle
+      args: &dataset_args
+        data_fp: ${data_fp}
+        input_columns: ${input_columns}
+        label_columns: ${label_columns}
+        hold_threshold: 0.05
+        softmax_tau: 0.1
+        resample_rule: 5min
+        lookback_window: ${lookback_window}
+        consecutive_n: 3
+        date_range: [2015-01-01, 2020-12-31]
+
+    val_dataset:
+      name: ConsecutiveCandle
+      args:
+        <<: *dataset_args
+        date_range: [2021-01-01, 2024-12-31]
+
+
+callback:
+  - name: DLinearBacktester
+    args:
+      tick_slippage_size: 0.05
+      commission_rate: 0.000029
+      price_multiplier: 50000
+      initial_balance: 50000000
+
+trainer:
+  args:
+    check_val_every_n_epoch: 10
