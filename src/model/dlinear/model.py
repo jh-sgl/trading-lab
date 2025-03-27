@@ -1,8 +1,5 @@
-from enum import Enum
-
 import lightning as L
 import torch
-import torch.nn.functional as F
 import torchmetrics as tm
 from omegaconf import DictConfig
 from torch.optim import Optimizer
@@ -42,7 +39,7 @@ class DLinearModel(L.LightningModule):
         return cache
 
     def _should_cache_train(self) -> bool:
-        return self.trainer.current_epoch % self.trainer.check_val_every_n_epoch == 0
+        return (self.trainer.current_epoch + 1) % self.trainer.check_val_every_n_epoch == 0
 
     @property
     def train_cache(self) -> dict[str, torch.Tensor | list[torch.Tensor]]:
@@ -88,14 +85,7 @@ class DLinearModel(L.LightningModule):
             cache[CacheKey.LABEL_PRICE_CLOSE].append(label_price_close)
 
     def _step(self, batch, cache: CacheDict | None) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        (
-            x,
-            y,
-            _,
-            y_ts,
-            y_price_open,
-            y_price_close,
-        ) = batch
+        x, y, _, y_ts, y_price_open, y_price_close = batch
 
         x = self._prepare_input(x)
         y = self._prepare_label(y)

@@ -2,6 +2,7 @@ from datetime import datetime
 
 import hydra
 import lightning as L
+from hydra.core.hydra_config import HydraConfig
 from lightning.pytorch.loggers import TensorBoardLogger
 from omegaconf import DictConfig
 
@@ -17,9 +18,8 @@ def main(cfg: DictConfig) -> None:
     datamodule = build_datamodule(cfg.datamodule)
     callbacks = build_callbacks(cfg.callback)
 
-    logger = TensorBoardLogger(
-        save_dir="logs", name=f"{datetime.now().strftime('%Y-%m-%d')}", version=datetime.now().strftime("%H_%M_%S")
-    )
+    output_dir = HydraConfig.get().runtime.output_dir
+    logger = TensorBoardLogger(save_dir=output_dir, name="", version="")
 
     trainer = L.Trainer(devices=1, accelerator="gpu", callbacks=callbacks, logger=logger, **cfg.trainer.args)
     trainer.fit(model=model, datamodule=datamodule)
