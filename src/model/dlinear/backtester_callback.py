@@ -37,15 +37,10 @@ class TradingStats:
 
         # TODO: add more attributes
 
-    def _calc_drawdown(self, profit_or_return: pd.DataFrame, compound: bool = False) -> pd.DataFrame:
-        if compound:
-            cumulative = (1 + profit_or_return).cumprod() - 1
-        else:
-            cumulative = profit_or_return.cumsum()
+    def _calc_drawdown(self, balance: pd.DataFrame, compound: bool = False) -> pd.DataFrame:
+        peak = balance.cummax()
 
-        peak = cumulative.cummax()
-
-        drawdown = cumulative - peak
+        drawdown = balance - peak
         if compound:
             drawdown = drawdown / peak
 
@@ -267,6 +262,8 @@ class DLinearBacktesterCallback(L.Callback):
         plotter = ResultPlotter(stats)
         plotter.draw_result(save_fp=plot_save_fp)
         backtest_result.to_parquet(backtest_dataframe_fp)
+
+        stats = self._trading_stats.calc_stats(backtest_result)
 
 
 class BasicBacktester:

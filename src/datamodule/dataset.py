@@ -43,7 +43,7 @@ class BasicDataset(Dataset):
 
     def _prepare_input(self, rows: pd.DataFrame) -> tuple[torch.Tensor, torch.Tensor]:
         input_ = torch.tensor(rows[self._input_columns].values, dtype=torch.float)
-        input_timestamp = torch.tensor(rows["time"].apply(lambda ts: ts.timestamp()).values)
+        input_timestamp = torch.tensor(rows["time"].apply(lambda ts: ts.timestamp()).values, dtype=torch.float64)
         return input_, input_timestamp
 
     def _prepare_label(
@@ -65,7 +65,7 @@ class BasicDataset(Dataset):
             return label
 
         label = _create_softmax_label(row[self._label_columns].item())
-        label_timestamp = torch.tensor(row["time"].timestamp())
+        label_timestamp = torch.tensor(row["time"].timestamp(), dtype=torch.float64)
         label_price_open = torch.tensor(row["future_price_open"])
         label_price_close = torch.tensor(row["future_price_close"])
         return label, label_timestamp, label_price_open, label_price_close
