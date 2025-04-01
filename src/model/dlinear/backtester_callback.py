@@ -40,13 +40,13 @@ class TradingStats:
     def _calc_drawdown(self, balance: pd.DataFrame, compound: bool = False) -> pd.DataFrame:
         peak = balance.cummax()
 
-        drawdown = balance - peak
+        drawdown = peak - balance
         if compound:
-            drawdown = drawdown / peak
+            drawdown = drawdown / (1 + peak)
 
         drawdown = drawdown.fillna(0)
 
-        is_drawdown = drawdown < 0
+        is_drawdown = drawdown > 0
         is_drawdown_shifted = is_drawdown.shift(fill_value=False)
 
         start_flag = (~is_drawdown_shifted) & is_drawdown
@@ -67,12 +67,12 @@ class TradingStats:
                         {
                             "start": group.index[0],
                             "end": group.index[-1],
-                            "max_drawdown_idx": group["drawdown"].idxmin(),
-                            "max_drawdown_val": group["drawdown"].min(),
+                            "max_drawdown_idx": group["drawdown"].idxmax(),
+                            "max_drawdown_val": group["drawdown"].max(),
                         }
                     )
                 )
-                .sort_values(by="max_drawdown_val")
+                .sort_values(by="max_drawdown_val", ascending=False)
                 .reset_index(drop=True)
             )
 
@@ -143,7 +143,7 @@ class TradingStats:
         self.account = self._calc_account(backtest_result)
 
         self.drawdown = self._calc_drawdown(self.balance)
-        self.mdd = self.drawdown.max_drawdown_val.min()
+        self.mdd = self.drawdown.max_drawdown_val.max()
 
         self.num_trading_days = len(set(self.timestamp.date))
         self.total_profit_uwon = backtest_result.profit_uwon.cumsum().iloc[-1]
@@ -263,8 +263,6 @@ class DLinearBacktesterCallback(L.Callback):
         plotter.draw_result(save_fp=plot_save_fp)
         backtest_result.to_parquet(backtest_dataframe_fp)
 
-        stats = self._trading_stats.calc_stats(backtest_result)
-
 
 class BasicBacktester:
     def __init__(
@@ -278,9 +276,15 @@ class BasicBacktester:
         self._price_multiplier = price_multiplier
 
     def _calc_contract_size(self, decision: torch.Tensor) -> torch.Tensor:
-        contract_size = decision.clone()
-        contract_size[decision < -0] = -1
-        # contract_size[(-0.1 < decision) & (decision < 0.1)] = 0
+        if isinstance(decision, torch.Tensor):
+            contract_size = decision.clone()
+        elif isinstance(decision, pd.Series):
+            contract_size = decision.copy()
+        else:
+            raise TypeError(f"Not supported decision type: {type(decision)}")
+
+        contract_size[decision < 0] = -1
+        contract_size[decision == 0] = 0
         contract_size[0 < decision] = 1
         return contract_size
 
@@ -294,7 +298,12 @@ class BasicBacktester:
         if not ignore_cost:
             return self._calc_slippage_cost(contract_size) + self._calc_commision_cost(contract_size, price)
         else:
-            return torch.zeros_like(contract_size)
+            if isinstance(contract_size, torch.Tensor):
+                return torch.zeros_like(contract_size)
+            elif isinstance(contract_size, pd.Series):
+                return pd.Series(0, index=contract_size.index)
+            else:
+                raise TypeError(f"Not supported contract_size type: {type(contract_size)}")
 
     def _calc_profit(
         self,
@@ -311,23 +320,31 @@ class BasicBacktester:
 
     def _create_result_dataframe(
         self,
-        timestamp: torch.Tensor,
-        decision: torch.Tensor,
-        contract_size: torch.Tensor,
-        contract_cost: torch.Tensor,
-        price_enter: torch.Tensor,
-        profit: torch.Tensor,
+        timestamp: torch.Tensor | pd.Series,
+        decision: torch.Tensor | pd.Series,
+        contract_size: torch.Tensor | pd.Series,
+        contract_cost: torch.Tensor | pd.Series,
+        price_enter: torch.Tensor | pd.Series,
+        profit: torch.Tensor | pd.Series,
     ) -> pd.DataFrame:
         result_df = pd.DataFrame()
 
-        result_df["timestamp"] = pd.to_datetime(timestamp.numpy(), unit="s")
+        timestamp, decision, contract_size, contract_cost, price_enter, profit = [
+            item.numpy() if isinstance(item, torch.Tensor) else item
+            for item in [timestamp, decision, contract_size, contract_cost, price_enter, profit]
+        ]
+
+        if timestamp.dtype != "datetime64[ns]":
+            timestamp = pd.to_datetime(timestamp, unit="s")
+
+        result_df["timestamp"] = timestamp
         result_df.set_index("timestamp", inplace=True)
 
-        result_df["decision"] = decision.numpy()
-        result_df["contract_size"] = contract_size.numpy()
-        result_df["contract_cost"] = contract_cost.numpy()
-        result_df["price_enter"] = price_enter.numpy()
-        result_df["profit"] = profit.numpy()
+        result_df["decision"] = decision
+        result_df["contract_size"] = contract_size
+        result_df["contract_cost"] = contract_cost
+        result_df["price_enter"] = price_enter
+        result_df["profit"] = profit
         result_df["profit_uwon"] = profit / UWON
         return result_df
 
