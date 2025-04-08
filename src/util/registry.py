@@ -6,6 +6,7 @@ from torch.utils.data import Dataset
 DATAMODULE_REGISTRY = {}
 DATASET_REGISTRY = {}
 MODEL_REGISTRY = {}
+NETWORK_REGISTRY = {}
 LOSS_FUNC_REGISTRY = {}
 CALLBACK_REGISTRY = {}
 
@@ -35,6 +36,16 @@ def register_model(name):
         if name in MODEL_REGISTRY:
             raise ValueError(f"Duplicate model registry key: {name}")
         MODEL_REGISTRY[name] = cls
+        return cls
+
+    return wrapper
+
+
+def register_network(name):
+    def wrapper(cls):
+        if name in NETWORK_REGISTRY:
+            raise ValueError(f"Duplicate network registry key: {name}")
+        NETWORK_REGISTRY[name] = cls
         return cls
 
     return wrapper
@@ -70,6 +81,10 @@ def build_dataset(dataset_cfg: DictConfig) -> Dataset:
 
 def build_model(model_cfg: DictConfig) -> L.LightningModule:
     return MODEL_REGISTRY[model_cfg.name](**model_cfg.args)
+
+
+def build_network(network_cfg: DictConfig) -> L.LightningModule:
+    return NETWORK_REGISTRY[network_cfg.name](**network_cfg.args)
 
 
 def build_loss_func(loss_cfg: DictConfig) -> nn.Module:

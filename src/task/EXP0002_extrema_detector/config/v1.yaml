@@ -1,0 +1,134 @@
+defaults:
+  - _self_
+
+desc: > 
+  DistPred
+
+data_fp: data/preprocessed_jh/v5.parquet
+
+use_soft_label: False
+
+position_scaling_unit: 0.05
+
+resample_rule: 5min
+input_lookback_num: 5
+# predict_lookahead_num: 20
+predict_lookahead_num: 50
+
+price_exit_column: future_price_close
+# price_exit_column: future_price_market_closing
+price_enter_column: future_price_open
+extrema_columns:
+  - future_price_close_maxima_20
+  - future_price_close_minima_20
+input_columns:
+  - future_price_close_maxima_5
+  - future_price_close_maxima_20
+  - future_price_close_maxima_60
+  - future_price_close_maxima_120
+  - future_price_close_minima_5
+  - future_price_close_minima_20
+  - future_price_close_minima_60
+  - future_price_close_minima_120
+  - future_price_close_disparity_5
+  - future_price_close_disparity_20
+  - future_price_close_disparity_100
+  - future_price_close_disparity_2000
+  # - usd_price_close_disparity_5
+  # - usd_price_close_disparity_20
+  # - usd_price_close_disparity_100
+  # - usd_price_close_disparity_2000
+  # - future_price_delta
+  # - future_volume
+  # - future_price_open
+  # - future_price_high
+  # - future_price_low
+  # - future_price_close
+  # - openinterest_open
+  # - openinterest_high
+  # - openinterest_low
+  # - openinterest_close
+  # - foreign_trade_open
+  # - foreign_trade_high
+  # - foreign_trade_low
+  # - foreign_trade_close
+  # - institutional_trade_open
+  # - institutional_trade_high
+  # - institutional_trade_low
+  # - institutional_trade_close
+  # - vkospi200_real_open
+  # - vkospi200_real_high
+  # - vkospi200_real_low
+  # - vkospi200_real_close
+  # - 167_price_open
+  # - 167_price_high
+  # - 167_price_low
+  # - 167_price_close
+  # - usd_price_open
+  # - usd_price_high
+  # - usd_price_low
+  # - usd_price_close
+
+model:
+  name: ExtremaDetector
+  args:
+    network:
+      name: ExtremaDetectorV1
+      args:
+        input_ch: ${len:${input_columns}}
+        hidden_dim: 1024
+        output_num: 1000
+        moving_avg_kernel_size: 25
+        input_lookback_num: ${input_lookback_num}
+    lr: 1e-4
+    loss_func:
+      name: DistPred
+      args: {}
+    use_soft_label: ${use_soft_label}
+      
+datamodule:
+  name: ExtremaDetector
+  args:
+    train_batch_size: 64
+    train_num_workers: 48
+    val_batch_size: 64
+    val_num_workers: 48
+
+    train_dataset:
+      name: ExtremaDetector
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        input_columns: ${input_columns}
+        extrema_columns: ${extrema_columns}
+        price_enter_column: ${price_enter_column}
+        price_exit_column: ${price_exit_column}
+        date_range: [2015-01-01, 2018-12-31]
+        input_lookback_num: ${input_lookback_num}
+        predict_lookahead_num: ${predict_lookahead_num}
+        use_soft_label: ${use_soft_label}
+        position_threshold: ${position_scaling_unit}
+
+    val_dataset:
+      name: ExtremaDetector
+      args:
+        <<: *dataset_args
+        date_range: [2019-01-01, 2024-12-31]
+
+
+callback:
+  - name: ExtremaDetectorBacktester
+    args:
+      tick_slippage_size: 0.05
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 50000000
+      risk_exposure: 0.2
+      position_scaling_unit: ${position_scaling_unit}
+      volatility_coef: 100
+      position_strategy: risk_volatility_adjustment
+
+trainer:
+  args:
+    check_val_every_n_epoch: 10
+    log_every_n_steps: 10

@@ -1,1 +1,2 @@
-from .dlinear import DLinearModel
+import model.bandpredictor
+import model.extrema_detector

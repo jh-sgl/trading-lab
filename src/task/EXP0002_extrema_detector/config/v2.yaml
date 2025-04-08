@@ -1,0 +1,22 @@
+defaults:
+  - v1
+  - _self_
+
+desc: > 
+  rerun non-linear + risk-volatility adjusted positioning strategy
+
+model:
+  name: ExtremaDetector
+  args:
+    network:
+      name: ExtremaDetectorV2
+      args:
+        input_ch: ${len:${input_columns}}
+        hidden_dim: 1024
+        output_num: 1000
+        moving_avg_kernel_size: 25
+        input_lookback_num: ${input_lookback_num}
+    lr: 1e-4
+    loss_func:
+      name: DistPred
+      args: {}

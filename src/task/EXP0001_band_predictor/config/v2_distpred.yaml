@@ -1,0 +1,113 @@
+defaults:
+  - _self_
+
+data_fp: data/preprocessed_jh/v4-5.parquet
+max_seq_len: 1000
+lookback_days: 3
+today_cutoff_hour: 12
+input_columns:
+  - usd_price_close_disparity_5
+  - usd_price_close_disparity_20
+  - usd_price_close_disparity_100
+  - usd_price_close_disparity_2000
+  # - future_price_close_disparity_5
+  # - future_price_close_disparity_20
+  # - future_price_close_disparity_100
+  # - future_price_close_disparity_2000
+  # - future_price_delta
+  # - future_volume
+  # - future_price_open
+  # - future_price_high
+  # - future_price_low
+  # - future_price_close
+  # - openinterest_open
+  # - openinterest_high
+  # - openinterest_low
+  # - openinterest_close
+  # - foreign_trade_open
+  # - foreign_trade_high
+  # - foreign_trade_low
+  # - foreign_trade_close
+  # - institutional_trade_open
+  # - institutional_trade_high
+  # - institutional_trade_low
+  # - institutional_trade_close
+  # - vkospi200_real_open
+  # - vkospi200_real_high
+  # - vkospi200_real_low
+  # - vkospi200_real_close
+  # - 167_price_open
+  # - 167_price_high
+  # - 167_price_low
+  # - 167_price_close
+  # - usd_price_open
+  # - usd_price_high
+  # - usd_price_low
+  # - usd_price_close
+main_price_columns:
+  - usd_price_open
+  - usd_price_high
+  - usd_price_low
+  - usd_price_close
+  # - future_price_open
+  # - future_price_high
+  # - future_price_low
+  # - future_price_close
+
+model:
+  name: BandPredictor
+  args:
+    seq_len: ${max_seq_len}
+    pred_len: 24
+    output_num: 1
+    input_ch: ${len:${input_columns}}
+    moving_avg_kernel_size: 5
+    lookback_days: ${lookback_days}
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}
+      
+datamodule:
+  name: BandPredictor
+  args:
+    train_batch_size: 64
+    train_num_workers: 48
+    val_batch_size: 64
+    val_num_workers: 48
+
+    train_dataset:
+      name: BandPredictor
+      args: &dataset_args
+        data_fp: ${data_fp}
+        input_columns: ${input_columns}
+        main_price_columns: ${main_price_columns}
+        band_top_column: usd_price_max_crossing_band_top
+        band_bottom_column: usd_price_max_crossing_band_bottom
+        band_offset_column: usd_price_max_crossing_band_offset_prev_tr
+        resample_rule: 1min
+        lookback_days: ${lookback_days}
+        today_cutoff_hour: ${today_cutoff_hour}
+        date_range: [2015-01-01, 2020-12-31]
+        max_seq_len: ${max_seq_len}
+
+    val_dataset:
+      name: BandPredictor
+      args:
+        <<: *dataset_args
+        date_range: [2021-01-01, 2024-12-31]
+
+
+callback:
+  - name: BandPredictorBacktester
+    args:
+      tick_slippage_size: 0.05
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 50000000
+      today_cutoff_hour: ${today_cutoff_hour}
+
+trainer:
+  args:
+    check_val_every_n_epoch: 10
+    log_every_n_steps: 10
