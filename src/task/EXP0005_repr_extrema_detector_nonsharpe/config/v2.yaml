@@ -1,0 +1,22 @@
+defaults:
+  - v1
+  - _self_
+
+desc: > 
+  non-linear
+
+model:
+  name: SharpeExtremaDetector
+  args:
+    network:
+      name: SharpeExtremaDetectorV2
+      args:
+        input_ch: 384
+        hidden_dim: 1024
+        output_num: 1
+        moving_avg_kernel_size: 25
+        input_lookback_num: ${input_lookback_num}
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}

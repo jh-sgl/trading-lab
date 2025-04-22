@@ -1,0 +1,23 @@
+defaults:
+  - v1
+  - _self_
+
+exp_name: ???
+desc: > 
+  MLPDropout
+
+input_columns: []
+input_lookback_num: 1
+model:
+  name: RemainingPeakTroughPredictor
+  args:
+    network:
+      name: RemainingPeakTroughPredictorMLPDropout
+      args:
+        num_inputs: ${len:${input_columns}}
+        num_outputs: 2
+    lr: 1e-3
+    loss_func:
+      name: MSE
+      args: {}
+    use_soft_label: ${use_soft_label}

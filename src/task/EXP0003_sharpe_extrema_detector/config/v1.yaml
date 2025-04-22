@@ -1,0 +1,90 @@
+defaults:
+  - _self_
+
+desc: > 
+  MSE instead of DistPred
+  + position_scaling_unit: 0.1
+  + sharpe_36 instead of 24
+
+data_fp: data/preprocessed_jh/v5-2.parquet
+
+use_soft_label: False
+
+position_scaling_unit: 0.1
+
+resample_rule: 5min
+input_lookback_num: 100
+predict_lookahead_num: 36
+
+sharpe_column: future_price_close_sharpe_36
+price_exit_column: future_price_close
+price_enter_column: future_price_open
+input_columns:
+  - future_price_close_disparity_5
+  - future_price_close_disparity_20
+  - future_price_close_disparity_100
+  - future_price_close_disparity_2000
+
+model:
+  name: SharpeExtremaDetector
+  args:
+    network:
+      name: SharpeExtremaDetectorV1
+      args:
+        input_ch: ${len:${input_columns}}
+        hidden_dim: 1024
+        output_num: 1
+        moving_avg_kernel_size: 25
+        input_lookback_num: ${input_lookback_num}
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}
+    use_soft_label: ${use_soft_label}
+      
+datamodule:
+  name: SharpeExtremaDetector
+  args:
+    train_batch_size: 64
+    train_num_workers: 8
+    val_batch_size: 64
+    val_num_workers: 8
+
+    train_dataset:
+      name: SharpeExtremaDetector
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        input_columns: ${input_columns}
+        sharpe_column: ${sharpe_column}
+        price_enter_column: ${price_enter_column}
+        price_exit_column: ${price_exit_column}
+        date_range: [2015-01-01, 2018-12-31]
+        input_lookback_num: ${input_lookback_num}
+        predict_lookahead_num: ${predict_lookahead_num}
+        use_soft_label: ${use_soft_label}
+        position_threshold: ${position_scaling_unit}
+
+    val_dataset:
+      name: SharpeExtremaDetector
+      args:
+        <<: *dataset_args
+        date_range: [2019-01-01, 2024-12-31]
+
+
+callback:
+  - name: SharpeExtremaDetectorBacktester
+    args:
+      tick_slippage_size: 0.05
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 50000000
+      risk_exposure: 0.2
+      position_scaling_unit: ${position_scaling_unit}
+      volatility_coef: 100
+      position_strategy: thresholding
+
+trainer:
+  args:
+    check_val_every_n_epoch: 10
+    log_every_n_steps: 10

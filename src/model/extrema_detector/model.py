@@ -78,8 +78,10 @@ class ExtremaDetectorModel(L.LightningModule):
 
         if self._use_soft_label:
             output = output[..., -1] - output[..., 0]
+            price_exit_label = price_exit_label[..., -1] - price_exit_label[..., 0]
         elif len(output.shape) > 1:
             output = output.mean(dim=-1)
+
         if not self.training and self.current_epoch > 25:
             for o, p in zip(output, price_exit_label):
                 print(f"{(o - p).item():.2f} / {o.item():.2f} / {p.item():.2f}")

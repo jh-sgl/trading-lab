@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 
 class AfterMergePreprocessingModuleBase(ABC):
@@ -81,6 +83,29 @@ class ExtremaExtractor(AfterMergePreprocessingModuleBase):
 
         result_df = result_df.merge(is_max_series.reset_index(), on=["resample_rule", "time"], how="left")
         result_df = result_df.merge(is_min_series.reset_index(), on=["resample_rule", "time"], how="left")
+        result_df = result_df.set_index("time")
+
+        return result_df
+
+
+class SharpeExtractor(AfterMergePreprocessingModuleBase):
+    def __init__(self, source_col_name: str, target_col_name: str, rolling_window: int) -> None:
+        self._source_col_name = source_col_name
+        self._target_col_name = target_col_name
+        self._rolling_window = rolling_window
+
+    def __call__(self, result_df: pd.DataFrame) -> pd.DataFrame:
+        sharpe = (
+            result_df.groupby("resample_rule")[self._source_col_name]
+            .apply(
+                lambda x: x.diff().rolling(self._rolling_window, min_periods=1).mean()
+                / (x.diff().rolling(self._rolling_window, min_periods=1).std() + 1e-10)
+            )
+            .rename(self._target_col_name)
+        ) * (252**0.5)
+        sharpe = sharpe.reset_index()
+        result_df = result_df.reset_index()
+        result_df = result_df.merge(sharpe, on=["resample_rule", "time"], how="left")
         result_df = result_df.set_index("time")
 
         return result_df

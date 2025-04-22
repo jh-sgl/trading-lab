@@ -1,0 +1,23 @@
+defaults:
+  - v1
+  - _self_
+
+desc: > 
+  non-linear
+
+model:
+  name: RemainingPeakTroughPredictor
+  args:
+    network:
+      name: RemainingPeakTroughPredictorV2
+      args:
+        input_ch: ${len:${input_columns}}
+        hidden_dim: 128
+        output_num: 2
+        moving_avg_kernel_size: 25
+        input_lookback_num: ${input_lookback_num}
+        use_repr: True
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}

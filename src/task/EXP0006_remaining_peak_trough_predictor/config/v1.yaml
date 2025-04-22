@@ -1,0 +1,102 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - _self_
+
+exp_name: ???
+desc: > 
+
+data_fp: data/preprocessed_jh/v5-2.parquet
+repr_fp: data/from_hr/minute-5_fset-0343314b_repr-33d7bf84_cached_repr.pt
+resample_rule: 5min
+
+input_columns: []
+  # - future_price_close_disparity_5
+  # - future_price_close_disparity_20
+  # - future_price_close_disparity_100
+  # - future_price_close_disparity_2000
+price_exit_column: future_price_close
+price_enter_column: future_price_open
+market_closing_column: future_price_market_closing
+
+input_lookback_num: 100
+use_repr: True
+use_normalized_label: True
+use_soft_label: False
+soft_label_tau: 2.5
+trade_stop_hour: 14
+position_scaling_unit: [0.0, 0.1, 0.25, 0.5]
+
+model:
+  name: RemainingPeakTroughPredictor
+  args:
+    network:
+      name: RemainingPeakTroughPredictorV1
+      args:
+        input_ch: ${len:${input_columns}}
+        hidden_dim: 128
+        output_num: 2
+        moving_avg_kernel_size: 25
+        input_lookback_num: ${input_lookback_num}
+        use_repr: ${use_repr}
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}
+    use_soft_label: ${use_soft_label}
+      
+datamodule:
+  name: RemainingPeakTroughPredictor
+  args:
+    train_batch_size: 64
+    train_num_workers: 8
+    val_batch_size: 64
+    val_num_workers: 8
+
+    train_dataset:
+      name: RemainingPeakTroughPredictor
+      args: &dataset_args
+        data_fp: ${data_fp}
+        repr_fp: ${repr_fp}
+        resample_rule: ${resample_rule}
+        date_range: [2015-01-01, 2018-12-31]
+        input_columns: ${input_columns}
+        price_enter_column: ${price_enter_column}
+        price_exit_column: ${price_exit_column}
+        trade_stop_hour: ${trade_stop_hour}
+        input_lookback_num: ${input_lookback_num}
+        use_repr: ${use_repr}
+        use_normalized_label: ${use_normalized_label}
+        use_soft_label: ${use_soft_label}
+        soft_label_tau: ${soft_label_tau}
+        position_threshold: 0.5
+        label_clip_val: 1.0
+
+    val_dataset:
+      name: RemainingPeakTroughPredictor
+      args:
+        <<: *dataset_args
+        date_range: [2019-01-01, 2024-12-31]
+
+
+callback:
+  - name: RemainingPeakTroughPredictorBacktester
+    args:
+      tick_slippage_size: 0.025
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 1000000000
+      risk_exposure: 0.2
+      position_scaling_unit: ${position_scaling_unit}
+      volatility_coef: 100
+      position_strategy: risk_volatility_adjustment
+      trade_stop_hour: 12
+      price_exit_column: ${price_exit_column}
+      market_closing_column: ${market_closing_column}
+
+trainer:
+  args:
+    check_val_every_n_epoch: 4
+    log_every_n_steps: 10

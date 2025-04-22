@@ -1,0 +1,22 @@
+defaults:
+  - v1
+  - _self_
+
+exp_name: ???
+desc: > 
+  MLPDropout
+input_lookback_num: 1
+
+model:
+  name: ReprExtremaDetector
+  args:
+    network:
+      name: ReprExtremaDetectorMLPDropout
+      args:
+        num_inputs: 384
+        num_outputs: 3
+    lr: 1e-3
+    loss_func:
+      name: Focal
+      args: {}
+    use_soft_label: ${use_soft_label}

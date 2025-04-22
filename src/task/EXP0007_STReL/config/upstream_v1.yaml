@@ -1,0 +1,88 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/EXP0007/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - _self_
+
+exp_name: ???
+desc: > 
+
+
+data_fp: data/preprocessed_jh/v5-2.parquet
+resample_rule: 5min
+
+input_columns:
+  - future_price_close
+lookback_num: 12
+lookahead_num: 12
+
+model:
+  name: STReLUpstream
+  checkpoint_fp: /data/jh/repo/trading-lab/outputs/2025-04-18/EXP0007/10-24-55_normlabel/checkpoints/best-epoch=0595-val_total_loss=2.526.ckpt
+  args:
+    network:
+      name: STReLUpstream
+      args:
+        input_ch: ${len:${input_columns}}
+        hidden_dim: 128
+        lookback_num: ${lookback_num}
+        lookahead_num: ${lookahead_num}
+        moving_avg_kernel_size: 3  # Consider not using SeriesDecompose
+    lr: 1e-4
+    regr_loss_func:
+      name: L1
+      args: {}
+    clsf_loss_func:
+      name: MSE # TODO: change into real classification loss
+      args: {}
+    reco_loss_func:
+      name: MSE
+      args: {}
+    rank_loss_func:
+      name: PairwiseMarginRanking
+      args: {}
+      
+datamodule:
+  name: STReL
+  args:
+    train_batch_size: 256
+    train_num_workers: 48
+    val_batch_size: 256
+    val_num_workers: 48
+
+    train_dataset:
+      name: STReLUpstream
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        date_range: [2015-01-01, 2018-12-31]
+        input_columns: ${input_columns}
+        lookback_num: ${lookback_num}
+        lookahead_num: ${lookahead_num}
+
+    val_dataset:
+      name: STReLUpstream
+      args:
+        <<: *dataset_args
+        date_range: [2019-01-01, 2020-12-31]
+
+
+callback: []
+  # - name: STReLBacktester
+  #   args:
+  #     tick_slippage_size: 0.025
+  #     commission_rate: 0.000029
+  #     price_multiplier: 250000
+  #     initial_balance: 1000000000
+  #     risk_exposure: 0.2
+  #     volatility_coef: 100
+  #     position_strategy: risk_volatility_adjustment
+  #     trade_stop_hour: 12
+  #     price_exit_column: ${price_exit_column}
+  #     market_closing_column: ${market_closing_column}
+
+trainer:
+  args:
+    check_val_every_n_epoch: 4
+    log_every_n_steps: 10

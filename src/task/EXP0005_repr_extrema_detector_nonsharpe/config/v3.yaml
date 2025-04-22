@@ -1,0 +1,21 @@
+defaults:
+  - v1
+  - _self_
+
+exp_name: ???
+desc: > 
+  MLPDropout
+
+model:
+  name: ReprExtremaDetectorNonsharpe
+  args:
+    network:
+      name: ReprExtremaDetectorNonsharpeMLPDropout
+      args:
+        num_inputs: 384
+        num_outputs: 3
+    lr: 1e-3
+    loss_func:
+      name: Focal
+      args: {}
+    use_soft_label: ${use_soft_label}

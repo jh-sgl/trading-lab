@@ -80,10 +80,14 @@ def build_dataset(dataset_cfg: DictConfig) -> Dataset:
 
 
 def build_model(model_cfg: DictConfig) -> L.LightningModule:
-    return MODEL_REGISTRY[model_cfg.name](**model_cfg.args)
+    cls_ = MODEL_REGISTRY[model_cfg.name]
+    if "checkpoint_fp" in model_cfg and model_cfg.checkpoint_fp is not None:
+        return cls_.load_from_checkpoint(model_cfg.checkpoint_fp)
+    else:
+        return cls_(**model_cfg.args)
 
 
-def build_network(network_cfg: DictConfig) -> L.LightningModule:
+def build_network(network_cfg: DictConfig) -> nn.Module:
     return NETWORK_REGISTRY[network_cfg.name](**network_cfg.args)
 
 
@@ -95,7 +99,8 @@ def build_callbacks(callback_cfg_list: list[DictConfig]) -> list[L.Callback]:
     return [CALLBACK_REGISTRY[callback_cfg.name](**callback_cfg.args) for callback_cfg in callback_cfg_list]
 
 
-from datamodule import *
-from datamodule.dataset import *
-from model import *
-from model.common.loss import *
+# from datamodule import *
+# from datamodule.dataset import *
+# from model import *
+# from model.common.loss import *
+from task import *

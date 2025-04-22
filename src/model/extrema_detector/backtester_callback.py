@@ -191,6 +191,9 @@ class ExtremaDetectorBacktesterCallback(L.Callback):
         position_scaling_unit: float,
         volatility_coef: float,
         position_strategy: str,
+        minima_column: str,
+        maxima_column: str,
+        exit_strategy: str,
     ) -> None:
         super().__init__()
         self._backtester = ExtremaDetectorBacktester(
@@ -202,6 +205,9 @@ class ExtremaDetectorBacktesterCallback(L.Callback):
             position_scaling_unit,
             volatility_coef,
             position_strategy,
+            minima_column,
+            maxima_column,
+            exit_strategy,
         )
         self._trading_stats = TradingStats(price_multiplier, initial_balance)
 
@@ -277,6 +283,9 @@ class ExtremaDetectorBacktester:
         position_scaling_unit: float,
         volatility_coef: float,
         position_strategy: str,
+        minima_column: str,
+        maxima_column: str,
+        exit_strategy: str,
     ) -> None:
         self._tick_slippage_size = tick_slippage_size
         self._commission_rate = commission_rate
@@ -286,28 +295,40 @@ class ExtremaDetectorBacktester:
         self._position_scaling_unit = position_scaling_unit
         self._volatility_coef = volatility_coef
         self._position_strategy = position_strategy
+        self._minima_column = minima_column
+        self._maxima_column = maxima_column
+        self._exit_strategy = exit_strategy
 
     def _calc_max_position(self, volatility: pd.Series) -> pd.Series:
         return (self._initial_balance * self._risk_exposure) / (
             volatility * self._volatility_coef * self._price_multiplier
         )
 
-    def _decide_position(self, output_pred: pd.Series, volatility: pd.Series) -> pd.Series:
+    def _decide_position(
+        self, output_pred: pd.Series, volatility: pd.Series, is_minima: pd.Series, is_maxima: pd.Series
+    ) -> pd.Series:
         if self._position_strategy == "risk_volatility_adjustment":
             max_position = self._calc_max_position(volatility)
             weight = output_pred / self._position_scaling_unit
             weight = np.sign(weight) * np.sqrt(abs(weight))
             position = (weight * max_position).apply(np.trunc)
             position[abs(output_pred) <= self._position_scaling_unit] = 0
+
         elif self._position_strategy == "thresholding":
             position = np.sign(output_pred) * (abs(output_pred) >= self._position_scaling_unit).astype(int)
+
         elif self._position_strategy == "naive":
             position = pd.Series(0, index=output_pred.index)
             position[output_pred > 0] = 1
             position[output_pred < 0] = -1
+
         elif self._position_strategy == "classification":
             max_position = self._calc_max_position(volatility)
             position = (output_pred * max_position).apply(np.trunc)
+
+        if self._exit_strategy == "next_opposite_extrema":
+            position[is_minima & (position < 0)] = 0
+            position[is_maxima & (position > 0)] = 0
 
         return position
 
@@ -361,7 +382,12 @@ class ExtremaDetectorBacktester:
         return result_df
 
     def run_backtest(self, df: pd.DataFrame, ignore_cost: bool = False) -> pd.DataFrame:
-        position = self._decide_position(df[DataKey.OUTPUT_PRED], df[DataKey.PRICE_ENTER_VOLATILITY_50])
+        position = self._decide_position(
+            df[DataKey.OUTPUT_PRED],
+            df[DataKey.PRICE_ENTER_VOLATILITY_50],
+            df[self._minima_column],
+            df[self._maxima_column],
+        )
         contract_cost = self._calc_contract_cost(position, df[DataKey.PRICE_ENTER], ignore_cost)
         profit = self._calc_profit(
             position, df[DataKey.PRICE_ENTER], df[DataKey.PRICE_EXIT], contract_cost, apply_price_multiplier=True

@@ -3,7 +3,8 @@ defaults:
   - _self_
 
 desc: > 
-  rerun non-linear + risk-volatility adjusted positioning strategy
+  MSE instead of DistPred
+  + position_scaling_unit: 0.3
 
 model:
   name: ExtremaDetector
@@ -13,10 +14,10 @@ model:
       args:
         input_ch: ${len:${input_columns}}
         hidden_dim: 1024
-        output_num: 1000
+        output_num: 1
         moving_avg_kernel_size: 25
         input_lookback_num: ${input_lookback_num}
     lr: 1e-4
     loss_func:
-      name: DistPred
+      name: L1
       args: {}

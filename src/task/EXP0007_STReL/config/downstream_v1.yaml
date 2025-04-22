@@ -1,0 +1,79 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/EXP0007/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - _self_
+
+exp_name: ???
+desc: > 
+
+data_fp: data/preprocessed_jh/v5-2.parquet
+upstream_model_fp: /data/jh/repo/trading-lab/outputs/2025-04-18/EXP0007/17-22-34_nonlin6holc/checkpoints/best-epoch=0067-val_total_loss=3.667.ckpt
+resample_rule: 5min
+
+input_columns:
+  - future_price_open
+  - future_price_high
+  - future_price_low
+  - future_price_close
+lookback_num: 12
+lookahead_num: 12
+
+model:
+  name: STReLDownstream
+  args:
+    network:
+      name: STReLDownstream
+      args:
+        input_ch: ${len:${input_columns}}
+        num_outputs: 1
+        drop_prob: 0.0
+    upstream_model_fp: ${upstream_model_fp}
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}
+      
+datamodule:
+  name: STReL
+  args:
+    train_batch_size: 256
+    train_num_workers: 48
+    val_batch_size: 256
+    val_num_workers: 48
+
+    train_dataset:
+      name: STReLDownstream
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        date_range: [2015-01-01, 2018-12-31]
+        input_columns: ${input_columns}
+        lookback_num: ${lookback_num}
+        lookahead_num: ${lookahead_num}
+
+    val_dataset:
+      name: STReLDownstream
+      args:
+        <<: *dataset_args
+        date_range: [2015-01-01, 2024-12-31]
+
+
+callback:
+  - name: STReLBacktester
+    args:
+      tick_slippage_size: 0.025
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 1000000000
+      risk_exposure: 0.2
+      volatility_coef: 100
+      position_strategy: risk_volatility_adjustment
+      position_scaling_unit: [0.0, 0.25]
+      trade_stop_hour: 14
+
+trainer:
+  args:
+    check_val_every_n_epoch: 4
+    log_every_n_steps: 10

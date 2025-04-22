@@ -1,0 +1,22 @@
+defaults:
+  - upstream_v1
+  - _self_
+
+datamodule:
+  args:
+    train_batch_size: 3
+    train_num_workers: 0
+    val_batch_size: 3
+    val_num_workers: 0
+
+    train_dataset:
+      args:
+        date_range: [2015-01-01, 2015-02-20]
+
+    val_dataset:
+      args:
+        date_range: [2016-04-01, 2016-04-30]
+
+trainer:
+  args:
+    check_val_every_n_epoch: 4

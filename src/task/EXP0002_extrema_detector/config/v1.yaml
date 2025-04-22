@@ -7,29 +7,28 @@ desc: >
 data_fp: data/preprocessed_jh/v5.parquet
 
 use_soft_label: False
+exit_strategy: next_opposite_extrema
+# exit_strategy: predict_lookahead
 
-position_scaling_unit: 0.05
+position_scaling_unit: 0.1
 
 resample_rule: 5min
-input_lookback_num: 5
-# predict_lookahead_num: 20
-predict_lookahead_num: 50
+input_lookback_num: 300
+predict_lookahead_num: 10
 
 price_exit_column: future_price_close
-# price_exit_column: future_price_market_closing
 price_enter_column: future_price_open
-extrema_columns:
-  - future_price_close_maxima_20
-  - future_price_close_minima_20
+minima_column: future_price_close_minima_20
+maxima_column: future_price_close_maxima_20
 input_columns:
-  - future_price_close_maxima_5
-  - future_price_close_maxima_20
-  - future_price_close_maxima_60
-  - future_price_close_maxima_120
-  - future_price_close_minima_5
-  - future_price_close_minima_20
-  - future_price_close_minima_60
-  - future_price_close_minima_120
+  # - future_price_close_maxima_5
+  # - future_price_close_maxima_20
+  # - future_price_close_maxima_60
+  # - future_price_close_maxima_120
+  # - future_price_close_minima_5
+  # - future_price_close_minima_20
+  # - future_price_close_minima_60
+  # - future_price_close_minima_120
   - future_price_close_disparity_5
   - future_price_close_disparity_20
   - future_price_close_disparity_100
@@ -77,12 +76,12 @@ model:
       args:
         input_ch: ${len:${input_columns}}
         hidden_dim: 1024
-        output_num: 1000
+        output_num: 1
         moving_avg_kernel_size: 25
         input_lookback_num: ${input_lookback_num}
     lr: 1e-4
     loss_func:
-      name: DistPred
+      name: L1
       args: {}
     use_soft_label: ${use_soft_label}
       
@@ -100,9 +99,11 @@ datamodule:
         data_fp: ${data_fp}
         resample_rule: ${resample_rule}
         input_columns: ${input_columns}
-        extrema_columns: ${extrema_columns}
+        minima_column: ${minima_column}
+        maxima_column: ${maxima_column}
         price_enter_column: ${price_enter_column}
         price_exit_column: ${price_exit_column}
+        exit_strategy: ${exit_strategy}
         date_range: [2015-01-01, 2018-12-31]
         input_lookback_num: ${input_lookback_num}
         predict_lookahead_num: ${predict_lookahead_num}
@@ -126,7 +127,10 @@ callback:
       risk_exposure: 0.2
       position_scaling_unit: ${position_scaling_unit}
       volatility_coef: 100
-      position_strategy: risk_volatility_adjustment
+      position_strategy: thresholding
+      minima_column: ${minima_column}
+      maxima_column: ${maxima_column}
+      exit_strategy: ${exit_strategy}
 
 trainer:
   args:

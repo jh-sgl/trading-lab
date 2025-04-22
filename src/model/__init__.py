@@ -1,2 +1,6 @@
 import model.bandpredictor
 import model.extrema_detector
+import model.remaining_peak_trough_predictor
+import model.repr_extrema_detector
+import model.repr_extrema_detector_nonsharpe
+import model.sharpe_extrema_detector
