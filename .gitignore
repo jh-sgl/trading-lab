@@ -1,6 +1,6 @@
 __pycache__
 *egg-info*
 .vscode
-outputs
+*outputs*
 data
 misc

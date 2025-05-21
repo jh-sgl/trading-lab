@@ -1,0 +1,21 @@
+defaults:
+  - v1
+  - _self_
+
+
+lookback_num: 25
+model:
+  name: basic
+  args:
+    network:
+      name: mlpdropout
+      args:
+        input_ch: 6
+        hidden_dim: 128
+        num_outputs: 9
+        lookback_num: ${lookback_num}
+        drop_prob: 0.3
+    lr: 1e-4
+    loss_func:
+      name: focal
+      args: {}

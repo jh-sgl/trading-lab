@@ -1,0 +1,21 @@
+defaults:
+  - v1_sota_25-04-20-20-47-45
+  - _self_
+
+
+model:
+  name: ExtremaDetectorRevis
+  args:
+    network:
+      name: ExtremaDetectorRevisMLPDropout
+      args:
+        input_ch: ${len:${input_columns_info}}
+        hidden_dim: 128
+        num_outputs: 1
+        lookback_num: ${lookback_num}
+        drop_prob: 0.3
+    lr: 1e-4
+    loss_func:
+      name: MSE
+      args: {}
+    use_soft_label: ${use_soft_label}

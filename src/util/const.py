@@ -1,7 +1,14 @@
 import pandas as pd
 
 
-# TODO: make read-only
+class Num:
+    COMMISSION_RATE = 0.000029
+    SLIPPAGE_PER_EXECUTION = 0.05
+    EPS = 1e-25
+    UWON = 100_000_000
+    PRICE_MULTIPLIER = 250_000
+
+
 def _load_margin_rate_config() -> pd.DataFrame:
     MARGIN_RATE_PATH = "/data/jh/Live4Common/csv/margin_rate.csv"
     margin_rate = pd.read_csv(MARGIN_RATE_PATH)

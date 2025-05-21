@@ -1,0 +1,76 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/EXP0009/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - _self_
+
+exp_name: ???
+desc: > 
+
+data_fp: data/preprocessed_jh/v5-2.parquet
+resample_rule: 1min
+trade_stop_hour: 12
+
+lookback_num: 200
+
+model:
+  name: mixup
+  args:
+    network:
+      name: nonlinear
+      args:
+        input_ch: 10     # fixed for raw_price, ema_{5, 20, 60, 120}, date_token
+        hidden_dim: 32
+        lookback_num: ${lookback_num}
+        num_outputs: 9    # fixed for 9 pivot zones
+        moving_avg_kernel_size: 25
+    lr: 1e-4
+    loss_func:
+      name: focal
+      args: {}
+    optimizer: AdamW
+    mixup_alpha: 1.0
+    lr_scheduler: CosineAnnealingWarmRestarts
+      
+datamodule:
+  name: basic
+  args:
+    train_batch_size: 256
+    train_num_workers: 48
+    val_batch_size: 256
+    val_num_workers: 48
+
+    train_dataset:
+      name: basic
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        date_range: [2015-01-01, 2018-12-31]
+        lookback_num: ${lookback_num}
+        trade_stop_hour: ${trade_stop_hour}
+
+    val_dataset:
+      name: basic
+      args:
+        <<: *dataset_args
+        date_range: [2015-01-01, 2024-12-31]
+
+
+callback:
+  - name: PivotLandingBacktester
+    args:
+      tick_slippage_size: 0.05
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 1000000000
+      risk_exposure: 0.2
+      volatility_coef: 100
+      position_strategy: risk_volatility_adjustment
+      position_scaling_unit: [0.0]
+      trade_stop_hour: ${trade_stop_hour}
+
+trainer:
+  args:
+    check_val_every_n_epoch: 4
+    log_every_n_steps: 10

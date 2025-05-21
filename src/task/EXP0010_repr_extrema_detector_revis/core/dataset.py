@@ -1,0 +1,178 @@
+import logging
+from pathlib import Path
+from typing import Callable
+
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import Dataset
+
+from util.const import Num
+from util.registry import register_dataset
+
+from .const import DFKey
+
+
+@register_dataset("basic")
+class BasicDataset(Dataset):
+    def __init__(
+        self,
+        data_fp: str,
+        repr_fp: str | None,
+        date_range: tuple[str, str],  # in "HHHH-MM-DD" format
+        resample_rule: str,
+        input_columns_info: list[str],
+        lookback_num: int,
+        lookahead_num: int,
+        minima_column: str,
+        maxima_column: str,
+        trade_stop_hour: int,
+        use_repr: bool,
+    ) -> None:
+        self._input_columns_info = input_columns_info
+        self._lookback_num = lookback_num
+        self._lookahead_num = lookahead_num
+        self._df, self._repr, repr_idx, self._repr_for_dbg = self._load_data(
+            data_fp, date_range, resample_rule, repr_fp
+        )
+        self._df, self._dataloader_idx, self._repr_idx = self._create_columns_for_trade(
+            self._df, lookback_num, lookahead_num, minima_column, maxima_column, trade_stop_hour, repr_idx
+        )
+        self._use_repr = use_repr
+
+    def _create_next_opposite_extrema_price(
+        self, df: pd.DataFrame, minima_column: str, maxima_column: str
+    ) -> pd.Series:
+        result_series = pd.Series([np.nan] * len(df), index=df.index)
+
+        idx = np.arange(len(df))
+        minima_idx = idx[df[minima_column]]
+        maxima_idx = idx[df[maxima_column]]
+
+        def _find_next_extrema(source_idx: np.ndarray, target_idx: np.ndarray) -> np.ndarray:
+            result = np.full_like(source_idx, fill_value=-1)
+            for i, s_idx in enumerate(source_idx):
+                future_targets = target_idx[target_idx > s_idx]
+                if len(future_targets) > 0:
+                    result[i] = future_targets[0]
+            return result
+
+        minima_next_maxima = _find_next_extrema(minima_idx, maxima_idx)
+        maxima_next_minima = _find_next_extrema(maxima_idx, minima_idx)
+
+        last_price = df[DFKey.FUTURE_PRICE_CLOSE].iloc[-1]
+        if len(minima_next_maxima) > 0:
+            for src, tgt in zip(minima_idx, minima_next_maxima):
+                result_series.iloc[src] = df.iloc[tgt][DFKey.FUTURE_PRICE_CLOSE] if tgt != -1 else last_price
+        if len(maxima_next_minima) > 0:
+            for src, tgt in zip(maxima_idx, maxima_next_minima):
+                result_series.iloc[src] = df.iloc[tgt][DFKey.FUTURE_PRICE_CLOSE] if tgt != -1 else last_price
+
+        return result_series
+
+    def _create_columns_for_trade(
+        self,
+        df: pd.DataFrame,
+        lookback_num: int,
+        lookahead_num: int,
+        minima_column: str,
+        maxima_column: str,
+        trade_stop_hour: int,
+        repr_idx: pd.Index,
+    ) -> tuple[pd.DataFrame, list[int], list[int]]:
+
+        price_group = df[DFKey.FUTURE_PRICE_CLOSE].groupby(df.index.date)
+        df[DFKey.PRICE_ENTER] = price_group.transform(lambda x: x.shift(-1, fill_value=x.iloc[-1]))
+        df[DFKey.PRICE_EXIT] = (
+            df.groupby(df.index.date)
+            .apply(lambda x: self._create_next_opposite_extrema_price(x, minima_column, maxima_column))
+            .reset_index(level=1)
+            .set_index("time")
+        )
+        df[DFKey.PRICE_MOVE] = df[DFKey.PRICE_EXIT] - df[DFKey.PRICE_ENTER]
+
+        df[DFKey.PRICE_MOVE_CLIPPED] = df[DFKey.PRICE_MOVE]
+        commission = (df[DFKey.PRICE_ENTER] + df[DFKey.PRICE_MOVE]) * Num.COMMISSION_RATE
+        is_profitable = (abs(df[DFKey.PRICE_MOVE]) - Num.SLIPPAGE_PER_EXECUTION * 2 - commission) > 0
+        df.loc[~is_profitable, DFKey.PRICE_MOVE_CLIPPED] = 0
+
+        df[DFKey.VOLATILITY_50] = df[DFKey.PRICE_ENTER].diff().abs().rolling(50, min_periods=1).mean()
+
+        df = df[df.index.hour < trade_stop_hour]
+        # df = df.dropna(subset=[DFKey.VOLATILITY_50]).copy()
+        # dataloader_idx = df.index.get_indexer(df[df[DFKey.PRICE_MOVE].notna()].index)
+        # dataloader_idx = [idx for idx in dataloader_idx if idx >= lookback_num]
+        df = df.dropna(subset=[DFKey.PRICE_MOVE, DFKey.VOLATILITY_50]).copy()
+        dataloader_idx = [idx for idx in range(len(df)) if idx >= lookback_num - 1]
+        repr_idx = repr_idx.get_indexer(df.index)
+        return df, dataloader_idx, repr_idx
+
+    @property
+    def _columns_to_use(self) -> list[str]:
+        return self._input_columns_info.keys()
+
+    def _filter_out_nan(self, data: pd.DataFrame, columns_to_use: list[str]) -> pd.DataFrame:
+        return data.dropna(subset=set(columns_to_use)).reset_index().set_index("time")
+
+    def _load_data(
+        self, data_fp: str | Path, date_range: tuple[str, str], resample_rule: str, repr_fp: str | None
+    ) -> tuple[pd.DataFrame, torch.Tensor, Callable]:
+        orig_data = pd.read_parquet(data_fp)
+
+        data = self._filter_out_nan(orig_data, self._columns_to_use)
+        data = data[data.resample_rule == resample_rule].copy()
+        time = data.index
+
+        start, end = date_range
+        logging.info(f"Using data from ({start}) to ({end})")
+
+        data = data[(start <= time) & (time <= end)]
+
+        repr_ = torch.load(repr_fp, weights_only=False)
+        repr_idx = pd.to_datetime(repr_["df"]["time"]["open"].dt.floor("5T").values)
+
+        data = data.loc[repr_idx[repr_idx.isin(data.index)]].copy()
+        data.index.name = "time"
+
+        return data, repr_["repr"], repr_idx, repr_
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return self._df
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        current_idx = self._dataloader_idx[idx]
+
+        past_start = current_idx - self._lookback_num + 1  # discard anchor elem (see UpstreamDataset.__getitem__())
+
+        past_rows = self._df.iloc[past_start : current_idx + 1]  # current-inclusive
+        current_row = self._df.iloc[current_idx]
+
+        inputs_to_concat = []
+        if len(self._input_columns_info) > 0:
+            inputs = past_rows[self._input_columns_info.keys()].copy()
+            for col_name, normalize in self._input_columns_info.items():
+                if normalize == "first_row":
+                    inputs[col_name] -= inputs[col_name].iloc[0]
+                elif normalize == "standardized_normal":
+                    inputs[col_name] = (inputs[col_name] - inputs[col_name].mean()) / (inputs[col_name].std() + Num.EPS)
+                elif normalize == None:
+                    pass
+                else:
+                    raise ValueError(f"Unknown normalization mode: {normalize}")
+
+            inputs_to_concat.append(inputs.values.astype(float))
+
+        if self._use_repr:
+            selected_repr_idx = self._repr_idx[past_start : current_idx + 1]
+            repr_inputs = self._repr[selected_repr_idx]
+            repr_inputs = repr_inputs.reshape(repr_inputs.shape[0], -1)
+            inputs_to_concat.append(repr_inputs)
+
+        inputs = torch.tensor(np.concat(inputs_to_concat, axis=-1), dtype=torch.float32)
+        label = torch.tensor(current_row[DFKey.PRICE_MOVE_CLIPPED], dtype=torch.float)
+        timestamp = torch.tensor(current_row.name.value, dtype=torch.int64)
+        return inputs, label, timestamp
+
+    def __len__(self) -> int:
+        return len(self._dataloader_idx)

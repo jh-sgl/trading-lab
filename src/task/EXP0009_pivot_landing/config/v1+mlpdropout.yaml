@@ -1,0 +1,21 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/EXP0009/multirun_1_taonly/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - v1
+  - _self_
+lookback_num: 1
+use_df_inputs: False
+
+model:
+  name: basic
+  args:
+    network:
+      name: mlpdropout
+      args:
+        input_ch: 0     # fixed for raw_price, ema_{5, 20, 60, 120}, date_token
+        lookback_num: ${lookback_num}
+        drop_prob: 0.3
+        num_outputs: 8    # fixed for 9 pivot zones
+      

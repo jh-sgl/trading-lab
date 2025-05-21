@@ -1,0 +1,103 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/EXP0012/debug/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - _self_
+
+exp_name: ???
+desc: > 
+
+data_fp: data/preprocessed_jh/v5-2.parquet
+
+resample_rule: 5min
+
+lookback_num: 25
+
+df_input_columns_info:
+  # future_price_open: first_row
+  # future_price_high: first_row
+  # future_price_low: first_row
+  # future_price_close: first_row
+  # future_volume: standardized_normal # TODO: not ideal
+  # future_price_delta: null
+  # future_price_close_maxima_5: null
+  # future_price_close_maxima_20: null
+  # future_price_close_maxima_60: null
+  # future_price_close_maxima_120: null
+  # future_price_close_minima_5: null
+  # future_price_close_minima_20: null
+  # future_price_close_minima_60: null
+  # future_price_close_minima_120: null
+  future_price_close_disparity_5: null
+  future_price_close_disparity_20: null
+  future_price_close_disparity_100: null
+  future_price_close_disparity_2000: null
+  # vkospi200_real_close: null
+  # openinterest_close: standardized_normal # TODO: not ideal
+  # foreign_trade_close: standardized_normal # TODO: not ideal
+  # institutional_trade_close: standardized_normal # TODO: not ideal
+
+model:
+  name: basic
+  args:
+    network:
+      name: basic
+      args:
+        input_ch: 7
+        hidden_dim: 8
+        lookback_num: ${lookback_num}
+        moving_avg_kernel_size: 5
+    lr: 1e-3
+    loss_func:
+      name: focal
+      args: {}
+      
+datamodule:
+  name: basic
+  args:
+    train_batch_size: 256
+    train_num_workers: 48
+    val_batch_size: 256
+    val_num_workers: 48
+
+    train_dataset:
+      name: basic
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        date_range: [2015-01-01, 2018-12-31]
+        df_input_columns_info: ${df_input_columns_info}
+        lookback_num: ${lookback_num}
+        strategy:
+          # name: liquiditytrapreversal
+          # args:
+          #   wick_window: 20
+          #   flow_window: 20
+          #   trap_thresh: 0.00001
+          name: momentumforeignflow
+          args:
+            hold_time_in_min: 500
+            window: 50
+            price_thresh: 0.005
+          # name: foreignvolumeprice
+          # args:
+          #   hold_time_in_min: 500
+
+    val_dataset:
+      name: basic
+      args:
+        <<: *dataset_args
+        date_range: [2015-01-01, 2024-12-31]
+
+
+callback:
+  - name: basic
+    args:
+      initial_balance: 1000000000
+
+trainer:
+  args:
+    check_val_every_n_epoch: 16
+    log_every_n_steps: 10
+    max_epochs: 200

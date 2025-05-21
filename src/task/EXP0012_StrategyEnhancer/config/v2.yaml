@@ -1,0 +1,11 @@
+defaults:
+  - v1
+  - _self_
+
+lookback_num: 1
+model:
+  args:
+    network:
+      name: mlpdropout
+      args:
+        drop_prob: 0.3

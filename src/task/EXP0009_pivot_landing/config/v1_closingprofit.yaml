@@ -1,0 +1,69 @@
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d}/EXP0009/multirun_19_17+closingprofit+PRICEMOVE/${now:%H-%M-%S}_${exp_name}
+
+defaults:
+  - v1
+  - _self_
+
+exp_name: ???
+desc: > 
+
+model:
+  name: basic
+  args:
+    network:
+      name: nonlinear
+      args:
+        input_ch: 10     # fixed for raw_price, ema_{5, 20, 60, 120}, date_token
+        hidden_dim: 8
+        lookback_num: ${lookback_num}
+        num_outputs: 3    # fixed for 9 pivot zones
+        moving_avg_kernel_size: 25
+        use_repr: ${use_repr}
+    lr: 1e-4
+    loss_func:
+      name: focal
+      args: {}
+    optimizer: AdamW
+    lr_scheduler: CosineAnnealingWarmRestarts
+      
+datamodule:
+  args:
+    train_batch_size: 256
+    train_num_workers: 0
+    val_batch_size: 256
+    val_num_workers: 0
+
+    train_dataset:
+      name: closingprofit
+      args: &dataset_args
+        data_fp: ${data_fp}
+        resample_rule: ${resample_rule}
+        date_range: [2015-01-01, 2018-12-31]
+        lookback_num: ${lookback_num}
+        trade_stop_hour: ${trade_stop_hour}
+        add_gumbel_noise: False
+        repr_fp: ${repr_fp}
+        use_repr: ${use_repr}
+        use_df_inputs: ${use_df_inputs}
+
+    val_dataset:
+      name: closingprofit
+      args:
+        <<: *dataset_args
+        date_range: [2015-01-01, 2024-12-31]
+
+
+callback:
+  - name: PivotLandingBacktester
+    args:
+      tick_slippage_size: 0.025
+      commission_rate: 0.000029
+      price_multiplier: 250000
+      initial_balance: 1000000000
+      risk_exposure: 0.2
+      volatility_coef: 100
+      position_strategy: classification
+      position_scaling_unit: [0.0]
+      trade_stop_hour: ${trade_stop_hour}
