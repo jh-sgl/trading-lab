@@ -1,0 +1,59 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v1_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: putcall_oi_delta
+    args: random
+  - name: putcall_2nd_oi_delta
+    args: random
+  - name: putcall_oi_ratio
+    args: random
+  - name: putcall_2nd_oi_ratio
+    args: random
+  - name: putcall_2nd_price_ratio
+    args: random
+  - name: putcall_oi_skew
+    args: random
+  - name: putcall_iv_skew_slope
+    args: random
+  - name: putcall_delta_imbalance
+    args: random
+  - name: gamma_wall_pressure
+    args: random
+  - name: macro_divergence
+    args: random
+  - name: bond_3y_shock
+    args: random
+  - name: bond_10y_shock
+    args: random
+  - name: usd_shock
+    args: random
+  - name: trade_pulse
+    args: random
+  - name: orderbook_lag
+    args: random
+  - name: bti
+    args: random
+  - name: bsfs
+    args: random
+  - name: ird
+    args: random
+  - name: participant_corr
+    args: random
+  - name: ttmr
+    args: random
+  - name: theory_deviation
+    args: random
+  - name: normalized_basis
+    args: random
+  - name: vkospi_zscore
+    args: random
+  - name: book_flicker_rate
+    args: random
+  - name: vanna_pressure
+    args: random

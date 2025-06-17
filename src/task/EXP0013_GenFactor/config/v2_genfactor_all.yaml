@@ -1,0 +1,121 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0013_FactorFactory/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - _self_
+
+exp_name: ???
+
+data_fp: data/preprocessed_jh/v6_factor_factory_rev1.parquet
+factorset_fp: null
+# factorset_fp: src/task/EXP0013_FactorFactory/external/results/factorset/000a54a0.pt
+# factorset_fp: src/task/EXP0013_FactorFactory/external/results/factorset/852ae00c.pt
+
+resample_rule: 5min
+lookback_num: 1
+initial_balance: 1000000000
+stop_trade_after_n_min: 180
+
+gen_factorset_num: 16
+gen_factorset:
+  - name: LSOFI
+    args: {}
+  - name: COVGAP
+    args: {}
+  - name: VSHPI
+    args: {}
+  - name: DGRPI
+    args: {}
+  - name: LSI
+    args: {}
+  - name: CPI
+    args: {}
+  - name: HSFI
+    args: {}
+  - name: VIRPI
+    args: {}
+  - name: IMRI
+    args: {}
+  - name: ATRI
+    args: {}
+  - name: RIVP
+    args: {}
+  - name: RSSkew
+    args: {}
+  - name: ISSM
+    args: {}
+  - name: PPSD
+    args: {}
+  - name: PLDI
+    args: {}
+  - name: CASI
+    args: {}
+
+model:
+  name: mixup
+  args:
+    mixup_alpha: 1.0
+    network:
+      name: mlp_dropout
+      args:
+        input_dim: 16
+        output_dim: 3
+        dropout_rate: 0.3
+        lookback_num: ${lookback_num}
+    lr: 1e-3
+    optimizer: ASAM
+    lr_scheduler: None
+    loss_func:
+      name: reversefocal
+      args: {}
+      
+datamodule:
+  name: basic
+  args:
+    batch_size: 64
+    num_workers: 4
+
+    dataset:
+      name: basic
+      args: 
+        data_fp: ${data_fp}
+        factorset_fp: ${factorset_fp}
+        gen_factorset: ${gen_factorset}
+        gen_factorset_num: ${gen_factorset_num}
+        resample_rule: ${resample_rule}
+        train_date_range: [2015-01-01, 2018-12-31]
+        total_date_range: [2015-01-01, 2024-12-31]
+        stop_trade_after_n_min: ${stop_trade_after_n_min}
+        lookback_num: ${lookback_num}
+        hold_thresh: 0.5
+        tau: 2.5
+
+callback:
+  - name: backtester
+    args:
+      initial_balance: ${initial_balance}
+      backtester:
+        name: basic
+        args:
+          stop_loss_func:
+            name: no_stop
+            args: {}
+          take_profit_func:
+            name: no_take
+            args: {}
+          initial_balance: ${initial_balance}
+          pred_to_signal_mode: shl_wsum
+          position_size_strategy: voladj
+          signal_threshold: 0.2
+          risk_exposure: 0.2
+          volatility_coef: 100
+          volatility_window: 50
+          volatility_clip_range: [0.1, 10]
+          stop_trade_after_n_min: ${stop_trade_after_n_min}
+
+trainer:
+  args:
+    check_val_every_n_epoch: 4
+    log_every_n_steps: 5
+    max_epochs: 48

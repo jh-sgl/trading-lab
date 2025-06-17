@@ -1,0 +1,25 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v1_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: CASI
+    args:
+      shock_response_window: 40
+      vol_window_factor: 1
+  - name: CASI
+    args:
+      shock_response_window: 10
+      vol_window_factor: 2
+  - name: CASI
+    args:
+      shock_response_window: 20
+      vol_window_factor: 3
+  - name: CASI
+    args:
+      shock_response_window: 40
+      vol_window_factor: 2

@@ -1,0 +1,127 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - _self_
+
+exp_name: ???
+
+data_fp: data/preprocessed_jh/v6_factor_factory_rev1.parquet
+ta_factorset_fp: src/task/EXP0014_GenFactorRepr/external/results/factorset/000a54a0.pt
+
+train_date_range: [2015-01-01, 2018-12-31]
+valid_date_range: [2019-01-01, 2020-12-31]
+test_date_range: [2021-01-01, 2024-12-31]
+
+resample_rule: 5min
+
+repr_lookback_num: 100
+repr_lookahead_num: 24
+
+initial_balance: 1000000000
+
+signal_stop_trade_after_n_min: 180
+signal_label_type: sharpe_at_market_close
+
+input_dim: 16
+
+gen_factorset: []
+
+datamodule:
+  name: basic_datamodule
+  args:
+    batch_size: 256
+    num_workers: 8
+
+    dataset:
+      name: basic_dataset
+      args: 
+        data_fp: ${data_fp}
+        ta_factorset_fp: ${ta_factorset_fp}
+        gen_factorset: ${gen_factorset}
+        train_date_range: ${train_date_range}
+        valid_date_range: ${valid_date_range}
+        test_date_range: ${test_date_range}
+        repr_lookback_num: ${repr_lookback_num}
+        repr_lookahead_num: ${repr_lookahead_num}
+        signal_stop_trade_after_n_min: ${signal_stop_trade_after_n_min}
+        resample_rule: ${resample_rule}
+        soft_label_hold_thresh: 0.5
+        soft_label_tau: 2.5
+        signal_label_type: ${signal_label_type}
+  
+repr:
+  model:
+    name: repr_model
+    args:
+      network:
+        name: repr_dlinear
+        args:
+          repr_lookback_num: ${repr_lookback_num}
+          repr_lookahead_num: ${repr_lookahead_num}
+          moving_avg_kernel_size: 25
+      lr: 1e-3
+      optimizer: Adam
+      loss_func:
+        name: l1
+        args: {}
+      
+
+  callbacks: {}
+
+  trainer:
+    args:
+      check_val_every_n_epoch: 1
+      log_every_n_steps: 5
+      max_epochs: 10
+
+signal:
+  model:
+    name: signal_mixup
+    args:
+      network:
+        name: signal_mlpdropout
+        args:
+          input_dim: ${input_dim}
+          repr_lookahead_num: ${repr_lookahead_num}
+          output_dim: 3
+          dropout_rate: 0.3
+      lr: 1e-3
+      optimizer: ASAM
+      loss_func:
+        name: reversefocal
+        args: {}
+      mixup_alpha: 1.0
+
+  callbacks:
+    - name: backtester
+      args:
+        initial_balance: ${initial_balance}
+        train_date_range: ${train_date_range}
+        valid_date_range: ${valid_date_range}
+        test_date_range: ${test_date_range}
+        backtester:
+          name: basic
+          args:
+            stop_loss_func:
+              name: no_stop
+              args: {}
+            take_profit_func:
+              name: no_take
+              args: {}
+            initial_balance: ${initial_balance}
+            pred_to_signal_mode: shl_wsum
+            position_size_strategy: voladj
+            signal_threshold: 0.0
+            risk_exposure: 0.2
+            volatility_coef: 100
+            volatility_window: 50
+            volatility_clip_range: [0.1, 10]
+            signal_stop_trade_after_n_min: ${signal_stop_trade_after_n_min}
+
+  trainer:
+    args:
+      check_val_every_n_epoch: 4
+      log_every_n_steps: 5
+      max_epochs: 48

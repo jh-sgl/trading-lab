@@ -1,0 +1,59 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v1_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: ATRI
+    args: random
+
+  - name: CASI
+    args: random
+
+  - name: COVGAP
+    args: random
+
+  - name: CPI
+    args: random
+
+  - name: DGRPI
+    args: random
+
+  - name: HSFI
+    args: random
+
+  - name: IMRI
+    args: random
+
+  - name: ISSM
+    args: random
+
+  - name: LSI
+    args: random
+
+  - name: LSOFI
+    args: random
+
+  - name: OBGI
+    args: random
+
+  - name: PLDI
+    args: random
+
+  - name: PPSD
+    args: random
+
+  - name: RIVP
+    args: random
+
+  - name: RSSkew
+    args: random
+
+  - name: VIRPI
+    args: random
+
+  - name: VSHPI
+    args: random
