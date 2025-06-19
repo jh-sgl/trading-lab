@@ -66,13 +66,15 @@ class ReprModel(L.LightningModule):
     def training_step(self, batch, batch_idx) -> torch.Tensor:
         outputs, loss = self._step(batch)
         self._train_avg_loss(loss)
-        self.log("train_avg_loss", self._train_avg_loss, on_epoch=True, prog_bar=True)
+        self.log(
+            "repr_train_avg_loss", self._train_avg_loss, on_epoch=True, prog_bar=True
+        )
         return loss
 
     def validation_step(self, batch, batch_idx) -> None:
         outputs, loss = self._step(batch)
         self._val_avg_loss(loss)
-        self.log("val_avg_loss", self._val_avg_loss, on_epoch=True, prog_bar=True)
+        self.log("repr_val_avg_loss", self._val_avg_loss, on_epoch=True, prog_bar=True)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self._network(inputs)
@@ -146,11 +148,9 @@ class SignalModel(L.LightningModule):
         inputs, labels, _ = batch
 
         if self._repr_model is not None:
-            repr_outputs = self._repr_model.forward(inputs)
-            outputs = self._network(repr_outputs)
-        else:
-            outputs = self._network(inputs)
+            inputs = self._repr_model.forward(inputs)
 
+        outputs = self._network(inputs)
         loss = self._compute_loss(outputs, labels)
         return outputs, loss
 
@@ -163,24 +163,36 @@ class SignalModel(L.LightningModule):
             with torch.no_grad():
                 opt.first_step(zero_grad=True)
                 with torch.set_grad_enabled(True):
-                    outputs_perturbed, loss_perturbed = self._step(batch)
+                    outputs_perturbed, loss_perturbed, _ = self._step(batch)
                     self.manual_backward(loss_perturbed)
                 opt.second_step()
+            opt.zero_grad()
 
         self._train_avg_loss(loss)
-        self.log("train_avg_loss", self._train_avg_loss, on_epoch=True, prog_bar=True)
+        self.trainer.fit_loop.epoch_loop.manual_optimization.optim_step_progress.total.completed += (
+            1
+        )
+        self.log(
+            "signal_train_avg_loss", self._train_avg_loss, on_epoch=True, prog_bar=True
+        )
         return loss
 
     def validation_step(self, batch, batch_idx) -> None:
         outputs, loss = self._step(batch)
         self._val_avg_loss(loss)
-        self.log("val_avg_loss", self._val_avg_loss, on_epoch=True, prog_bar=True)
+        self.log(
+            "signal_val_avg_loss", self._val_avg_loss, on_epoch=True, prog_bar=True
+        )
         timestamp = batch[-1]
         self._store_outputs_to_df(self.trainer.datamodule.df, outputs, timestamp)
 
     def _store_outputs_to_df(
-        self, df: pd.DataFrame, outputs: torch.Tensor, timeindex: torch.Tensor
+        self,
+        df: pd.DataFrame,
+        outputs: torch.Tensor,
+        timeindex: torch.Tensor,
     ) -> None:
+
         outputs = [o.tolist() for o in outputs.detach().cpu().numpy()]
         timeindex = timeindex.detach().cpu().numpy()
 
@@ -235,7 +247,7 @@ class SignalMixupModel(SignalModel):
         labels_a, labels_b = labels, labels[index]
         return inputs_mixup, labels_a, labels_b, lambda_
 
-    def _compute_loss(
+    def _compute_loss_mixup(
         self,
         outputs: torch.Tensor,
         labels_a: torch.Tensor,
@@ -247,17 +259,31 @@ class SignalMixupModel(SignalModel):
         loss = lambda_ * loss_a + (1 - lambda_) * loss_b
         return loss
 
-    def _step(self, batch) -> tuple[torch.Tensor, torch.Tensor]:
+    def _step(self, batch) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         inputs, labels, _ = batch
 
         if self._repr_model is not None:
             repr_outputs = self._repr_model.forward(inputs)
-            inputs_mixup, labels_a, labels_b, lambda_ = self._mixup(
-                repr_outputs, labels
-            )
-        else:
-            inputs_mixup, labels_a, labels_b, lambda_ = self._mixup(inputs, labels)
 
-        outputs = self._network(inputs_mixup)
-        loss = self._compute_loss(outputs, labels_a, labels_b, lambda_)
-        return outputs, loss
+            if self.training:
+                inputs_mixup, labels_a, labels_b, lambda_ = self._mixup(
+                    repr_outputs, labels
+                )
+                outputs = self._network(inputs_mixup)
+                loss = self._compute_loss_mixup(outputs, labels_a, labels_b, lambda_)
+            else:
+                outputs = self._network(repr_outputs)
+                loss = self._compute_loss(outputs, labels)
+
+            return outputs, loss, repr_outputs
+
+        else:
+            if self.training:
+                inputs_mixup, labels_a, labels_b, lambda_ = self._mixup(inputs, labels)
+                outputs = self._network(inputs_mixup)
+                loss = self._compute_loss_mixup(outputs, labels_a, labels_b, lambda_)
+            else:
+                outputs = self._network(inputs)
+                loss = self._compute_loss(outputs, labels)
+
+            return outputs, loss, None

@@ -127,7 +127,8 @@ class Backtester:
         signal_threshold: float,
         pred_to_signal_mode: str,
         position_size_strategy: str,
-        signal_stop_trade_after_n_min: int,
+        signal_stop_trade_after_n_min: int | None,
+        signal_trade_between_hours: tuple[str, str] | None,
     ) -> None:
         self._stop_loss_func = build_stop_loss_func(stop_loss_func)
         self._take_profit_func = build_take_profit_func(take_profit_func)
@@ -142,6 +143,7 @@ class Backtester:
         self._pred_to_signal_mode = pred_to_signal_mode
         self._position_size_strategy = position_size_strategy
         self._signal_stop_trade_after_n_min = signal_stop_trade_after_n_min
+        self._signal_trade_between_hours = signal_trade_between_hours
 
     def _calc_max_position_size(self, df: pd.DataFrame) -> pd.Series:
         volatility = (
@@ -186,12 +188,19 @@ class Backtester:
 
         signal = np.round(signal, decimals=0)
 
-        first_times = df.groupby(df.index.date).apply(lambda g: g.index.min())
         mask = pd.Series(False, index=df.index)
-        for _, first_time in first_times.items():
-            start = first_time
-            end = start + pd.Timedelta(minutes=self._signal_stop_trade_after_n_min)
-            mask |= (df.index >= start) & (df.index <= end)
+
+        if self._signal_stop_trade_after_n_min is not None:
+            first_times = df.groupby(df.index.date).apply(lambda g: g.index.min())
+            for _, first_time in first_times.items():
+                start = first_time
+                end = start + pd.Timedelta(minutes=self._signal_stop_trade_after_n_min)
+                mask |= (df.index >= start) & (df.index <= end)
+
+        if self._signal_trade_between_hours is not None:
+            start_hour, end_hour = self._signal_trade_between_hours
+            mask |= (df.index.hour >= start_hour) & (df.index.hour <= end_hour)
+
         signal[~mask] = 0
 
         return pd.Series(signal, index=output_pred.index)

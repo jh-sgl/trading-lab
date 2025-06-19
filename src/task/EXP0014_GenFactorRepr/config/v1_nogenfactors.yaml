@@ -8,7 +8,8 @@ defaults:
 exp_name: ???
 
 data_fp: data/preprocessed_jh/v6_factor_factory_rev1.parquet
-ta_factorset_fp: src/task/EXP0014_GenFactorRepr/external/results/factorset/000a54a0.pt
+ta_factorset_fp: src/task/EXP0014_GenFactorRepr/external/results/factorset/5e273fc1.pt
+# ta_factorset_fp: src/task/EXP0014_GenFactorRepr/external/results/factorset/000a54a0.pt
 
 train_date_range: [2015-01-01, 2018-12-31]
 valid_date_range: [2019-01-01, 2020-12-31]
@@ -22,6 +23,8 @@ repr_lookahead_num: 24
 initial_balance: 1000000000
 
 signal_stop_trade_after_n_min: 180
+signal_trade_between_hours: null
+
 signal_label_type: sharpe_at_market_close
 
 input_dim: 16
@@ -46,9 +49,11 @@ datamodule:
         repr_lookback_num: ${repr_lookback_num}
         repr_lookahead_num: ${repr_lookahead_num}
         signal_stop_trade_after_n_min: ${signal_stop_trade_after_n_min}
+        signal_trade_between_hours: ${signal_trade_between_hours}
         resample_rule: ${resample_rule}
         soft_label_hold_thresh: 0.5
         soft_label_tau: 2.5
+        soft_label_mode: dynamic
         signal_label_type: ${signal_label_type}
   
 repr:
@@ -119,6 +124,7 @@ signal:
             volatility_window: 50
             volatility_clip_range: [0.1, 10]
             signal_stop_trade_after_n_min: ${signal_stop_trade_after_n_min}
+            signal_trade_between_hours: ${signal_trade_between_hours}
 
   trainer:
     args:

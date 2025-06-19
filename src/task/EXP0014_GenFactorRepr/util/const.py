@@ -7,7 +7,11 @@ class DFKey:
     RESAMPLE_RULE: tuple[str, str] = ("resample_rule", "__NA__")
 
     FUTURE_PRICE_OPEN: tuple[str, str] = ("price", "open")
+    FUTURE_PRICE_HIGH: tuple[str, str] = ("price", "high")
+    FUTURE_PRICE_LOW: tuple[str, str] = ("price", "low")
     FUTURE_PRICE_CLOSE: tuple[str, str] = ("price", "close")
+    FUTURE_VOLUME: tuple[str, str] = ("price", "volume")
+
     TRADE_CUMSUM_CLOSE: tuple[str, str] = ("trade_cumsum", "close")
 
     FUTURE_THEORY_CLOSE: tuple[str, str] = ("future_theory", "close")

@@ -26,10 +26,10 @@ def main(cfg: DictConfig) -> None:
 
     repr_model_checkpoint = ModelCheckpoint(
         dirpath=os.path.join(output_dir, "repr"),
-        monitor="val_avg_loss",
+        monitor="repr_val_avg_loss",
         mode="min",
         save_top_k=1,
-        filename="repr_best-{epoch:04d}-{val_avg_loss:.3f}",
+        filename="repr_best-{epoch:04d}-{repr_val_avg_loss:.3f}",
         save_weights_only=False,
     )
     repr_callbacks.append(
@@ -45,7 +45,6 @@ def main(cfg: DictConfig) -> None:
     )
     repr_trainer.fit(model=repr_model, datamodule=datamodule)
 
-    # TODO: train for MLPDropout after finishing representation learning
     best_repr_model = repr_model.__class__.load_from_checkpoint(
         repr_model_checkpoint.best_model_path
     )
@@ -57,10 +56,11 @@ def main(cfg: DictConfig) -> None:
 
     signal_model_checkpoint = ModelCheckpoint(
         dirpath=os.path.join(output_dir, "signal"),
-        monitor="val_avg_loss",
+        monitor="signal_val_avg_loss",
         mode="min",
         save_top_k=1,
-        filename="signal_best-{epoch:04d}-{val_avg_loss:.3f}",
+        filename="signal_best-{epoch:04d}-{signal_val_avg_loss:.3f}",
+        every_n_epochs=1,
         save_weights_only=False,
     )
     signal_callbacks.append(
