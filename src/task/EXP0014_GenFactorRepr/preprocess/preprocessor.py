@@ -39,7 +39,9 @@ class BasicPreprocessor:
             raw_df = self._read_hdf_with_path(hdf_fp)
 
             raw_preprocessed_df = self._run_raw_preprocessing_pipeline(raw_df)
-            resample_preprocessed_df = self._run_resample_preprocessing_pipeline(raw_preprocessed_df)
+            resample_preprocessed_df = self._run_resample_preprocessing_pipeline(
+                raw_preprocessed_df
+            )
 
             return resample_preprocessed_df
 
@@ -49,11 +51,22 @@ class BasicPreprocessor:
                 raw_preprocessed_df = preprocessing_module(raw_preprocessed_df)
             return raw_preprocessed_df
 
-        def _run_resample_preprocessing_pipeline(self, raw_preprocessed_df: pd.DataFrame) -> pd.DataFrame:
+        def _run_resample_preprocessing_pipeline(
+            self, raw_preprocessed_df: pd.DataFrame
+        ) -> pd.DataFrame:
             result_dfs = []
             for resample_rule in self._resample_rules:
                 resampled_df = raw_preprocessed_df.resample(resample_rule)
-                result_df = self._create_empty_resampled_df(raw_preprocessed_df, resample_rule)
+
+                cols_to_create = []
+                for preprocessing_module in self._resample_preprocessing_pipeline:
+                    cols_to_create.extend(preprocessing_module.target_col_names)
+
+                result_df = self._create_empty_resampled_df(
+                    raw_preprocessed_df,
+                    resample_rule,  # cols_to_create
+                )
+                result_df = result_df.copy()
 
                 for preprocessing_module in self._resample_preprocessing_pipeline:
                     result_df = preprocessing_module(result_df, resampled_df)
@@ -64,14 +77,21 @@ class BasicPreprocessor:
             resample_preprocessed_df = pd.concat(result_dfs)
             return resample_preprocessed_df
 
-        def _create_empty_resampled_df(self, raw_preprocessed_df: pd.DataFrame, resample_rule: str) -> pd.DataFrame:
+        def _create_empty_resampled_df(
+            self,
+            raw_preprocessed_df: pd.DataFrame,
+            resample_rule: str,
+            # cols_to_create: list[tuple[str, str]],
+        ) -> pd.DataFrame:
             resampled_index = (
                 raw_preprocessed_df[~raw_preprocessed_df.index.duplicated(keep="first")]
                 .resample(resample_rule)
                 .asfreq()
                 .index
             )
-            empty_resampled_df = pd.DataFrame(index=resampled_index)
+            empty_resampled_df = pd.DataFrame(
+                index=resampled_index,  # columns=cols_to_create
+            )
             return empty_resampled_df
 
     def __init__(
@@ -82,9 +102,13 @@ class BasicPreprocessor:
         raw_data_dir: str,
         ray_actor_num: int,
         save_fp: str,
+        debug: bool = False,
     ) -> None:
         super().__init__()
         self._raw_data_fp_list = sorted(list(Path(raw_data_dir).glob("./*.h5")))
+        if debug:
+            self._raw_data_fp_list = self._raw_data_fp_list[:10]
+
         self._save_fp = Path(save_fp)
         self._resample_rules = resample_rules
         self._ray_actor_num = ray_actor_num
@@ -119,7 +143,9 @@ class BasicPreprocessor:
 
     def _merge_results(self, processed_list: list[pd.DataFrame]) -> pd.DataFrame:
         merged_result = pd.concat(processed_list)
-        merged_result = merged_result.sort_values(by=[("resample_rule", "__NA__"), ("time", "close")])
+        merged_result = merged_result.sort_values(
+            by=[("resample_rule", "__NA__"), ("time_boundary", "close")]
+        )
         return merged_result
 
     def run(self) -> None:
@@ -128,6 +154,8 @@ class BasicPreprocessor:
         result.columns = pd.MultiIndex.from_tuples(
             [col if isinstance(col, tuple) else (col,) for col in result.columns]
         )
-        result = result.dropna(subset=[("time", "close")])
-        result = result.sort_values(by=[("resample_rule", "__NA__"), ("time", "close")])
+        result = result.dropna(subset=[("time_boundary", "close")])
+        result = result.sort_values(
+            by=[("resample_rule", "__NA__"), ("time_boundary", "close")]
+        )
         result.to_parquet(self._save_fp)

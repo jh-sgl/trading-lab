@@ -1,17 +1,14 @@
 #!/bin/bash
-RUN_NAME_PREFIX="multirun_21_ta+bti"
+RUN_NAME_PREFIX="multirun_2_single_subfactor"
 
-MAX_JOBS=4
+MAX_JOBS=7
 MAX_RETRIES=50
-SLEEP_BETWEEN_JOBS=210
+SLEEP_BETWEEN_JOBS=30
 JOB_COUNT=0
 
 GENFACTORSETS=(
   # "putcall_oi_delta"
   # "putcall_2nd_oi_delta"
-  # "putcall_oi_ratio"
-  # "putcall_2nd_oi_ratio"
-  # "putcall_2nd_price_ratio"
   # "putcall_oi_skew"
   # "putcall_iv_skew_slope"
   # "putcall_delta_imbalance"
@@ -23,16 +20,15 @@ GENFACTORSETS=(
   # "trade_pulse"
   # "orderbook_lag"
   "bti"
-  # "bsfs"
-  # "ird"
-  # "participant_corr"
-  # "ttmr"
-  # "theory_deviation"
-  # "normalized_basis"
-  # "vkospi_zscore"
-  # "book_flicker_rate"
-  # "vanna_pressure"
-
+  "bsfs"
+  "ird"
+  "participant_corr"
+  "ttmr"
+  "theory_deviation"
+  "normalized_basis"
+  "vkospi_zscore"
+  "book_flicker_rate"
+  "vanna_pressure"
 )  # Add your factor names here
 
 # GENFACTORSETS=("theory_deviation")
@@ -66,9 +62,8 @@ run_job() {
     python -m task.EXP0014_GenFactorRepr.train \
       --config-name=v1_nogenfactors \
       exp_name=${run_name}/${exp_name} \
-      input_dim=20 \
-      ta_factorset_fp=/data/jh/repo/trading-lab/src/task/EXP0014_GenFactorRepr/external/results/factorset/${exp_name}.pt \
-      resample_rule=1min \
+      input_dim=4 \
+      ta_factorset_fp=null \
       "gen_factorset=[ {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random } ]" \
 
     if [ $? -eq 0 ]; then
@@ -98,8 +93,8 @@ export -f run_job
 i=1
 for genfactorset in "${GENFACTORSETS[@]}"; do
   RUN_NAME="${RUN_NAME_PREFIX}${i}${genfactorset,,}"  # lowercase genfactorset name
-  # for exp_name in {1..4}; do
-  for exp_name in "${EXPERIMENTS[@]}"; do
+  for exp_name in {1..4}; do
+  # for exp_name in "${EXPERIMENTS[@]}"; do
     run_job "$exp_name" "$RUN_NAME" "$genfactorset" &
     sleep $SLEEP_BETWEEN_JOBS
     ((JOB_COUNT++))

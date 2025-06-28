@@ -1,0 +1,33 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: LSOFI
+    args:
+      order_book_depth: 3
+      ma_window: 1
+      volatility_source: put_iv
+      signed_participant_flow: True
+  - name: LSOFI
+    args:
+      order_book_depth: 2
+      ma_window: 5
+      volatility_source: put_iv
+      signed_participant_flow: True
+  - name: LSOFI
+    args:
+      order_book_depth: 1
+      ma_window: 20
+      volatility_source: none
+      signed_participant_flow: True
+  - name: LSOFI
+    args:
+      order_book_depth: 1
+      ma_window: 60
+      volatility_source: avg_iv
+      signed_participant_flow: False

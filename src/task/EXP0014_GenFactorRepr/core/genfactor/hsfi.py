@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from ...util.const import DFKey
 from ...util.registry import register_genfactor
@@ -45,8 +45,8 @@ class HSFI(GenFactor):
         df_tmp = df.copy()
 
         # Book Flicker Rate: instability in top-of-book liquidity
-        buy_depth = df_tmp[DFKey.BUY_ORDER_1_CLOSE]
-        sell_depth = df_tmp[DFKey.SELL_ORDER_1_CLOSE]
+        buy_depth = df_tmp[DFKey.BUY_ORDER_1_QTY_CLOSE]
+        sell_depth = df_tmp[DFKey.SELL_ORDER_1_QTY_CLOSE]
         flicker = (
             (buy_depth.pct_change().abs() + sell_depth.pct_change().abs())
             .rolling(window=self.selected_params["flicker_window"], min_periods=1)

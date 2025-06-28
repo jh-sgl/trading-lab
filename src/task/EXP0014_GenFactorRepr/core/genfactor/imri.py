@@ -67,17 +67,17 @@ class IMRI(GenFactor):
         # 3. Components
         df_tmp["price_response"] = df_tmp[DFKey.FUTURE_PRICE_CLOSE].pct_change()
         df_tmp["depth_total"] = (
-            df_tmp[DFKey.BUY_ORDER_1_CLOSE]
-            + df_tmp[DFKey.BUY_ORDER_2_CLOSE]
-            + df_tmp[DFKey.BUY_ORDER_3_CLOSE]
-            + df_tmp[DFKey.BUY_ORDER_4_CLOSE]
-            + df_tmp[DFKey.BUY_ORDER_5_CLOSE]
+            df_tmp[DFKey.BUY_ORDER_1_QTY_CLOSE]
+            + df_tmp[DFKey.BUY_ORDER_2_QTY_CLOSE]
+            + df_tmp[DFKey.BUY_ORDER_3_QTY_CLOSE]
+            + df_tmp[DFKey.BUY_ORDER_4_QTY_CLOSE]
+            + df_tmp[DFKey.BUY_ORDER_5_QTY_CLOSE]
         ) + (
-            df_tmp[DFKey.SELL_ORDER_1_CLOSE]
-            + df_tmp[DFKey.SELL_ORDER_2_CLOSE]
-            + df_tmp[DFKey.SELL_ORDER_3_CLOSE]
-            + df_tmp[DFKey.SELL_ORDER_4_CLOSE]
-            + df_tmp[DFKey.SELL_ORDER_5_CLOSE]
+            df_tmp[DFKey.SELL_ORDER_1_QTY_CLOSE]
+            + df_tmp[DFKey.SELL_ORDER_2_QTY_CLOSE]
+            + df_tmp[DFKey.SELL_ORDER_3_QTY_CLOSE]
+            + df_tmp[DFKey.SELL_ORDER_4_QTY_CLOSE]
+            + df_tmp[DFKey.SELL_ORDER_5_QTY_CLOSE]
         )
         df_tmp["liq_withdraw"] = -df_tmp["depth_total"].diff()
         df_tmp["reversion_score"] = -df_tmp["price_response"] * df_tmp[

@@ -1,16 +1,19 @@
-from task.EXP0013_FactorFactory.preprocess.resample_preprocessing_module import (
-    DateExtractor,
-    OHLCVExtractor,
-)
-from task.EXP0013_GenFactor.preprocess.preprocessor import BasicPreprocessor
-from task.EXP0013_GenFactor.preprocess.raw_preprocessing_module import (
+import argparse
+
+from .preprocess.preprocessor import BasicPreprocessor
+from .preprocess.raw_preprocessing_module import (
     CumulativeTradeExtractor,
     DiffExtractor,
     TimeConverter,
     VolumeExtractor,
 )
+from .preprocess.resample_preprocessing_module import DateExtractor, OHLCVExtractor
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
+
     raw_preprocessing_pipeline = [
         TimeConverter("time", "date", set_index_and_sort=True),
         VolumeExtractor(
@@ -25,13 +28,13 @@ if __name__ == "__main__":
         ],
         *[
             DiffExtractor(
-                f"m0s_top_tx_201_{i:+d}_cum_tx_amt", f"m0s_top_tx_201_{i:+d}_tx_amt"
+                f"m0s_top_tx_301_{i:+d}_cum_tx_vol", f"m0s_top_tx_301_{i:+d}_tx_vol"
             )
             for i in range(-20, 21)
         ],
         *[
             DiffExtractor(
-                f"m0s_top_tx_301_{i:+d}_cum_tx_vol", f"m0s_top_tx_301_{i:+d}_tx_vol"
+                f"m0s_top_tx_201_{i:+d}_cum_tx_amt", f"m0s_top_tx_201_{i:+d}_tx_amt"
             )
             for i in range(-20, 21)
         ],
@@ -47,6 +50,38 @@ if __name__ == "__main__":
         DateExtractor("date"),
         OHLCVExtractor("time", "time_boundary", select_ohlc="oc"),
         OHLCVExtractor("future_volume", "price", select_ohlc="v"),
+        *[
+            OHLCVExtractor(
+                f"m0s_top_tx_201_{i:+d}_tx_vol",
+                f"m0s_top_tx_201_{i:+d}_tx_vol",
+                select_ohlc="v",
+            )
+            for i in range(-20, 21)
+        ],
+        *[
+            OHLCVExtractor(
+                f"m0s_top_tx_301_{i:+d}_tx_vol",
+                f"m0s_top_tx_301_{i:+d}_tx_vol",
+                select_ohlc="v",
+            )
+            for i in range(-20, 21)
+        ],
+        *[
+            OHLCVExtractor(
+                f"m0s_top_tx_201_{i:+d}_tx_amt",
+                f"m0s_top_tx_201_{i:+d}_tx_amt",
+                select_ohlc="v",
+            )
+            for i in range(-20, 21)
+        ],
+        *[
+            OHLCVExtractor(
+                f"m0s_top_tx_301_{i:+d}_tx_amt",
+                f"m0s_top_tx_301_{i:+d}_tx_amt",
+                select_ohlc="v",
+            )
+            for i in range(-20, 21)
+        ],
         OHLCVExtractor("future_price", "price", select_ohlc="ohlc"),
         *[
             OHLCVExtractor(key, key, select_ohlc="ohlc")
@@ -70,18 +105,6 @@ if __name__ == "__main__":
                 "put_iv",
                 "call_openint",
                 "put_openint",
-                "buy_order_total",
-                "sell_order_total",
-                "buy_order_1",
-                "sell_order_1",
-                "buy_order_2",
-                "sell_order_2",
-                "buy_order_3",
-                "sell_order_3",
-                "buy_order_4",
-                "sell_order_4",
-                "buy_order_5",
-                "sell_order_5",
                 "buy_order_1_price",
                 "sell_order_1_price",
                 "buy_order_2_price",
@@ -107,10 +130,25 @@ if __name__ == "__main__":
                 "m0s_top_tx_301_strike_price",
                 *[f"m0s_top_tx_201_{i:+d}_price" for i in range(-20, 21)],
                 *[f"m0s_top_tx_301_{i:+d}_price" for i in range(-20, 21)],
-                *[f"m0s_top_tx_201_{i:+d}_tx_vol" for i in range(-20, 21)],
-                *[f"m0s_top_tx_301_{i:+d}_tx_vol" for i in range(-20, 21)],
-                *[f"m0s_top_tx_201_{i:+d}_tx_amt" for i in range(-20, 21)],
-                *[f"m0s_top_tx_301_{i:+d}_tx_amt" for i in range(-20, 21)],
+                *[f"m0s_top_tx_201_{i:+d}_openint" for i in range(-20, 21)],
+                *[f"m0s_top_tx_301_{i:+d}_openint" for i in range(-20, 21)],
+            ]
+        ],
+        *[
+            OHLCVExtractor(key, key, select_ohlc="ohlcv")
+            for key in [
+                "buy_order_total",
+                "sell_order_total",
+                "buy_order_1",
+                "sell_order_1",
+                "buy_order_2",
+                "sell_order_2",
+                "buy_order_3",
+                "sell_order_3",
+                "buy_order_4",
+                "sell_order_4",
+                "buy_order_5",
+                "sell_order_5",
             ]
         ],
     ]
@@ -119,14 +157,13 @@ if __name__ == "__main__":
         raw_preprocessing_pipeline=raw_preprocessing_pipeline,
         resample_preprocessing_pipeline=resample_preprocessing_pipeline,
         resample_rules=[
-            "1min",
+            # "1min",
             "5min",
-            "15min",
-            "1h",
         ],
-        raw_data_dir="/data/jh/repo/trading-lab/data/raw/20240624_fix_investors_to_cumsum_v2.2.0/h5",
-        ray_actor_num=24,
-        save_fp="/data/jh/repo/trading-lab/data/preprocessed_jh/v6_factor_factory.parquet",
+        raw_data_dir="/data/jh/repo/trading-lab/data/raw/20250626_option_oi_added_by_qqqeck/",
+        ray_actor_num=12,
+        save_fp="/data/jh/repo/trading-lab/data/preprocessed_jh/v7_factor_factory_rev1.parquet",
+        debug=args.debug,
     )
 
     basic_preprocessor.run()

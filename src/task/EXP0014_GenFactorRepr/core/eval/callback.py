@@ -18,6 +18,7 @@ class BacktesterCallback(L.Callback):
         valid_date_range: tuple[str, str],
         test_date_range: tuple[str, str],
         backtester: DictConfig,
+        save_parquet: bool,
     ) -> None:
         super().__init__()
         self._backtester = build_backtester(backtester)
@@ -34,6 +35,8 @@ class BacktesterCallback(L.Callback):
             test_date_range[1],
         )
         self._stats = {"TRAIN": None, "OOS": None, "TOTAL": None}
+
+        self._save_parquet = save_parquet
 
     def on_validation_end(self, trainer: L.Trainer, pl_module) -> None:
         if trainer.sanity_checking:
@@ -62,7 +65,8 @@ class BacktesterCallback(L.Callback):
             if prefix == "TOTAL":
                 total_sharpe = stats.net_stat.sharpe_ratio
                 plotter.draw_result(save_fp=plot_save_fp)
-                df.to_parquet(backtest_dataframe_fp)
+                if self._save_parquet:
+                    df.to_parquet(backtest_dataframe_fp)
             elif prefix == "OOS":
                 oos_sharpe = stats.net_stat.sharpe_ratio
             elif prefix == "TRAIN":

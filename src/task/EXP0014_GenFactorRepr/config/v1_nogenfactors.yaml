@@ -7,7 +7,7 @@ defaults:
 
 exp_name: ???
 
-data_fp: data/preprocessed_jh/v6_factor_factory_rev1.parquet
+data_fp: data/preprocessed_jh/v7_factor_factory_rev1.parquet
 ta_factorset_fp: src/task/EXP0014_GenFactorRepr/external/results/factorset/5e273fc1.pt
 # ta_factorset_fp: src/task/EXP0014_GenFactorRepr/external/results/factorset/000a54a0.pt
 
@@ -25,7 +25,9 @@ initial_balance: 1000000000
 signal_stop_trade_after_n_min: 180
 signal_trade_between_hours: null
 
-signal_label_type: sharpe_at_market_close
+# signal_label_type: sharpe_to_eod
+signal_label_type: sharpe_to_180
+
 
 input_dim: 16
 
@@ -83,7 +85,7 @@ repr:
 
 signal:
   model:
-    name: signal_mixup
+    name: signal_model
     args:
       network:
         name: signal_mlpdropout
@@ -106,6 +108,7 @@ signal:
         train_date_range: ${train_date_range}
         valid_date_range: ${valid_date_range}
         test_date_range: ${test_date_range}
+        save_parquet: false
         backtester:
           name: basic
           args:

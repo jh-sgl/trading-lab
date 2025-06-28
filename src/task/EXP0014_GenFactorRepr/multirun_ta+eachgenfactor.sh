@@ -1,12 +1,13 @@
 #!/bin/bash
-RUN_NAME_PREFIX="multirun_8_ta+"
+RUN_NAME_PREFIX="multirun_17_ta+"
 
-MAX_JOBS=5
-MAX_RETRIES=50
-SLEEP_BETWEEN_JOBS=70
+MAX_JOBS=6
+MAX_RETRIES=10
+SLEEP_BETWEEN_JOBS=30
 JOB_COUNT=0
 
-GENFACTORSETS=("LSOFI" "COVGAP" "VSHPI" "DGRPI" "LSI" "CPI" "HSFI" "VIRPI" "IMRI" "ATRI" "RIVP" "RSSkew" "ISSM" "PPSD" "PLDI" "CASI" "OBGI")  # Add your factor names here
+# GENFACTORSETS=("LSOFI" "COVGAP" "VSHPI" "DGRPI" "LSI" "CPI" "HSFI" "VIRPI" "IMRI" "ATRI" "RIVP" "RSSkew" "ISSM" "PPSD" "PLDI" "CASI" "OBGI")  # Add your factor names here
+GENFACTORSETS=("LSOFI" "COVGAP" "VSHPI" "DGRPI" "LSI" "CPI" "HSFI" "VIRPI" "ATRI" "RIVP" "RSSkew" "ISSM" "PPSD" "PLDI" "CASI" )  # Add your factor names here
 
 EXPERIMENTS=(
   82b701fe 312cd9f5 000a54a0 f40378a0 852ae00c b7ab602f
@@ -29,15 +30,15 @@ run_job() {
     echo "🚴‍♀️ Running $exp_name with $genfactorset (Attempt $attempt)"
     echo
     python -m task.EXP0014_GenFactorRepr.train \
-      --config-name=v1_4${genfactorset} \
+      --config-name=v3_4${genfactorset} \
       exp_name=${run_name}/${exp_name} \
       ta_factorset_fp=/data/jh/repo/trading-lab/src/task/EXP0014_GenFactorRepr/external/results/factorset/${exp_name}.pt \
       input_dim=20 \
-      repr.model.args.network.name=repr_nonlinear \
-      +repr.model.args.network.args.input_dim=20 \
-      repr.model.args.lr=0.0001 \
-      repr.trainer.args.max_epochs=50 \
-      signal.model.args.network.args.dropout_rate=0.5 \
+      # repr.model.args.network.name=repr_nonlinear \
+      # +repr.model.args.network.args.input_dim=20 \
+      # repr.model.args.lr=0.0001 \
+      # repr.trainer.args.max_epochs=50 \
+      # signal.model.args.network.args.dropout_rate=0.5 \
 
     if [ $? -eq 0 ]; then
       echo

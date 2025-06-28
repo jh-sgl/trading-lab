@@ -1,0 +1,1 @@
+from .extrema import ExtremaFilter

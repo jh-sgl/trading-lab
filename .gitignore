@@ -3,8 +3,9 @@ __pycache__
 **/outputs*
 *egg-info*
 **/notebook*
-data
-misc
+/data/
+/misc/
 *.parquet
 failed_experiments.txt
 **/external/**/results
+**/external/**/data

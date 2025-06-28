@@ -29,18 +29,18 @@ class BookTiltIndex(GenFactor):
         dlvl = self.selected_params["depth_levels"]
 
         buy_order_dfkeys = [
-            DFKey.BUY_ORDER_1_CLOSE,
-            DFKey.BUY_ORDER_2_CLOSE,
-            DFKey.BUY_ORDER_3_CLOSE,
-            DFKey.BUY_ORDER_4_CLOSE,
-            DFKey.BUY_ORDER_5_CLOSE,
+            DFKey.BUY_ORDER_1_QTY_CLOSE,
+            DFKey.BUY_ORDER_2_QTY_CLOSE,
+            DFKey.BUY_ORDER_3_QTY_CLOSE,
+            DFKey.BUY_ORDER_4_QTY_CLOSE,
+            DFKey.BUY_ORDER_5_QTY_CLOSE,
         ]
         sell_order_dfkeys = [
-            DFKey.SELL_ORDER_1_CLOSE,
-            DFKey.SELL_ORDER_2_CLOSE,
-            DFKey.SELL_ORDER_3_CLOSE,
-            DFKey.SELL_ORDER_4_CLOSE,
-            DFKey.SELL_ORDER_5_CLOSE,
+            DFKey.SELL_ORDER_1_QTY_CLOSE,
+            DFKey.SELL_ORDER_2_QTY_CLOSE,
+            DFKey.SELL_ORDER_3_QTY_CLOSE,
+            DFKey.SELL_ORDER_4_QTY_CLOSE,
+            DFKey.SELL_ORDER_5_QTY_CLOSE,
         ]
 
         buy_weighted = sum((i + 1) * df_tmp[buy_order_dfkeys[i]] for i in range(dlvl))

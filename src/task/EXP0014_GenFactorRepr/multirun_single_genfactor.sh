@@ -1,28 +1,50 @@
 #!/bin/bash
-RUN_NAME_PREFIX="multirun_20_single_genfactor_1min"
+RUN_NAME_PREFIX="multirun_19_dlinear_ta+"
 
-MAX_JOBS=4
-MAX_RETRIES=50
-SLEEP_BETWEEN_JOBS=70
+MAX_JOBS=25
+MAX_RETRIES=10
+SLEEP_BETWEEN_JOBS=45
 JOB_COUNT=0
 
 GENFACTORSETS=(
-  "LSOFI" "COVGAP" "VSHPI" "DGRPI" "LSI" "CPI" "HSFI"
-  "VIRPI" "IMRI" "ATRI" "RIVP" "RSSkew" "ISSM" "PPSD"
+  "VSHPI"
+  "RCPSkew"
+  "AOC"
+  "StraddleImbalance"
+  "VolCR"
+  "OIBreak"
+  "adjo_IVSS"
+  "adjo_OVT"
+  "adjo_SDPR"
+  "adjo_ODMC"
+  "adjo_AORPA"
+  "adjo_CCD"
+  "adjo_TSCS"
+  "adjo_TTop"
+  "adjo_BWOP"
+  "adjo_VAOMI"
+  "adjo_GPB"
+  "IBLSI"
+  "OBPD"
+  # "adjo_LVI"
+  "adjo_CDI"
+  "LSOFI" "COVGAP" "DGRPI" "LSI" "CPI" "HSFI"
+  "VIRPI" "IMRI" "ATRI"
+  "RIVP" "RSSkew" "ISSM" "PPSD"
   "PLDI" "CASI" "OBGI"
 )  # Add your factor names here
 
 # GENFACTORSETS=("theory_deviation")
 
 # ta[:32]
-# EXPERIMENTS=(
-#   82b701fe 312cd9f5 000a54a0 f40378a0 852ae00c b7ab602f
-#   c39df009 ea8ca645 a11f5653 5817bc20 4cec70f3 752e0dc3
-#   124783a5 6ce8d902 34076097 69d4cb14 5b956bc9 bcdcee71
-#   161ae57f ce4e3f24 bc8cb06d 77011b70 c37c39d6 5adba56b
-#   ddd70767 5c74213d d70a2979 5e273fc1 cca6152b d4d0f8bd
-#   b65464ca 06d87f5c
-# )
+EXPERIMENTS=(
+  82b701fe 312cd9f5 000a54a0 f40378a0 852ae00c b7ab602f
+  c39df009 ea8ca645 a11f5653 5817bc20 4cec70f3 752e0dc3
+  124783a5 6ce8d902 34076097 69d4cb14 5b956bc9 bcdcee71
+  161ae57f ce4e3f24 bc8cb06d 77011b70 c37c39d6 5adba56b
+  ddd70767 5c74213d d70a2979 5e273fc1 cca6152b d4d0f8bd
+  b65464ca 06d87f5c
+)
 
 # TA[32:100]
 # EXPERIMENTS=(
@@ -41,12 +63,11 @@ run_job() {
     echo "🚴‍♀️ Running $exp_name with $genfactorset (Attempt $attempt)"
     echo
     python -m task.EXP0014_GenFactorRepr.train \
-      --config-name=v1_nogenfactors \
+      --config-name=v3_lastv4_nogenfactors \
       exp_name=${run_name}/${exp_name} \
-      input_dim=4 \
-      ta_factorset_fp=null \
-      resample_rule=1min \
-      "gen_factorset=[ {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random } ]" \
+      input_dim=24 \
+      ta_factorset_fp=/data/jh/repo/trading-lab/src/task/EXP0014_GenFactorRepr/external/results/factorset/${exp_name}.pt \
+      "gen_factorset=[ {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random } ]" \
 
     if [ $? -eq 0 ]; then
       echo
@@ -75,8 +96,8 @@ export -f run_job
 i=1
 for genfactorset in "${GENFACTORSETS[@]}"; do
   RUN_NAME="${RUN_NAME_PREFIX}${i}${genfactorset,,}"  # lowercase genfactorset name
-  for exp_name in {1..4}; do
-  # for exp_name in "${EXPERIMENTS[@]}"; do
+  # for exp_name in {1..4}; do
+  for exp_name in "${EXPERIMENTS[@]}"; do
     run_job "$exp_name" "$RUN_NAME" "$genfactorset" &
     sleep $SLEEP_BETWEEN_JOBS
     ((JOB_COUNT++))
@@ -98,4 +119,3 @@ echo "✅ All jobs completed. Failed experiments logged in failed_experiments.tx
 
 # "gen_factorset=[ {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random }, {name: \"${genfactorset}\", args: random } ]"
 # "gen_factorset=[ {name: \"${genfactorset}\", args: {ma_window: 1}}, {name: \"${genfactorset}\", args: {ma_window: 5}}, {name: \"${genfactorset}\", args: {ma_window: 10}}, {name: \"${genfactorset}\", args: {ma_window: 25}}, {name: \"${genfactorset}\", args: {ma_window: 50}} ]"
-      # ta_factorset_fp=/data/jh/repo/trading-lab/src/task/EXP0014_GenFactorRepr/external/results/factorset/${exp_name}.pt \

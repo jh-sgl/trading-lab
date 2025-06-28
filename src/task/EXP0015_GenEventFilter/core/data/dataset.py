@@ -1,0 +1,616 @@
+import logging
+from pathlib import Path
+from typing import Literal
+
+import numpy as np
+import pandas as pd
+import torch
+from numba import njit
+from omegaconf import DictConfig
+from torch.utils.data import Dataset
+
+from ...external.alphasearch_naive.feature.ta_ops.ta_ops import add_ta
+from ...util.const import RESAMPLE_RULE_TO_MIN, DFKey, Num
+from ...util.registry import build_geneventfilter, register_dataset
+
+INIT_MSG_BUFFER = ""
+
+
+@njit
+def sharpe_to_n_min_numba(
+    profits: np.ndarray, window_size: int, eps: float
+) -> np.ndarray:
+    n = len(profits)
+    result = np.empty(n)
+    for i in range(n):
+        if window_size == -1:
+            seg = profits[i:]
+        else:
+            seg = profits[i : i + window_size]
+
+        if len(seg) < 2:
+            result[i] = 0
+        else:
+            mean = seg.mean() * np.sqrt(252)
+            var = np.mean((seg - mean) ** 2)
+            std = np.sqrt(var)
+            if std < 1e-8:
+                result[i] = 0
+            else:
+                sharpe = mean / (std + eps)
+                result[i] = sharpe
+    return result
+
+
+class StandardScaler:
+    def __init__(self):
+        self.mean = 0.0
+        self.std = 1.0
+
+    def fit(self, data):
+        self.mean = data.mean(0)
+        self.std = data.std(0)
+
+    def transform(self, data):
+        mean = (
+            torch.from_numpy(self.mean).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.mean
+        )
+        std = (
+            torch.from_numpy(self.std).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.std
+        )
+        return (data - mean) / std
+
+    def inverse_transform(self, data):
+        mean = (
+            torch.from_numpy(self.mean).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.mean
+        )
+        std = (
+            torch.from_numpy(self.std).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.std
+        )
+        return (data * std) + mean
+
+
+@register_dataset("basic_dataset")
+class BasicDataset(Dataset):
+    def __init__(
+        self,
+        data_fp: str,
+        ta_factorset_fp: str,
+        geneventfilter: DictConfig,
+        lookback_event_only: bool,
+        input_cols_used_in_geneventfilter: bool,
+        train_date_range: tuple[str, str],  # in "HHHH-MM-DD" format
+        valid_date_range: tuple[str, str],  # in "HHHH-MM-DD" format
+        test_date_range: tuple[str, str],  # in "HHHH-MM-DD" format
+        repr_lookback_num: int,
+        repr_lookahead_num: int,
+        signal_stop_trade_after_n_min: int | None,
+        signal_trade_between_hours: tuple[str, str] | None,
+        resample_rule: str,
+        soft_label_hold_thresh: float,
+        soft_label_tau: float,
+        soft_label_mode: Literal["fixed", "dynamic"],
+        signal_label_type: str,
+    ) -> None:
+        global INIT_MSG_BUFFER
+        INIT_MSG_BUFFER += "\n" + "-" * 110
+
+        self._learning_stage = "repr"
+
+        self._lookback_event_only = lookback_event_only
+        self._input_cols_used_in_geneventfilter = input_cols_used_in_geneventfilter
+        self._repr_lookback_num = repr_lookback_num
+        self._repr_lookahead_num = repr_lookahead_num
+        self._soft_label_hold_thresh = soft_label_hold_thresh
+        self._soft_label_tau = soft_label_tau
+        self._soft_label_mode = soft_label_mode
+        self._resample_rule = resample_rule
+
+        self._train_date_range = train_date_range
+        self._valid_date_range = valid_date_range
+        self._test_date_range = test_date_range
+        self._total_date_range = (train_date_range[0], test_date_range[1])
+
+        df, self._factor_cols, self._geneventfilter_name = self._load_data(
+            data_fp,
+            ta_factorset_fp,
+            self._total_date_range,
+            resample_rule,
+            geneventfilter,
+        )
+        df, execution_price_col = self._set_execution_price(df)
+        df, self._signal_label_col = self._add_signal_label_col(df, signal_label_type)
+        df = self._drop_unused_cols(
+            df,
+            list(self._factor_cols)
+            + [
+                DFKey.DATE,
+                DFKey.EVENT_MASK,
+                self._signal_label_col,
+                execution_price_col,
+            ],
+        )
+        df = self._drop_unused_rows(df, self._factor_cols)
+        self._df = self._scale_input_factors_by_train_date_range(
+            df, self._factor_cols, train_date_range
+        )
+        self._factor_tensor = self._create_factor_tensor(df, self._factor_cols)
+        self._timeindex_tensor = self._create_timeindex_tensor(df)
+        self._signal_label_tensor_or_ndarray = (
+            self._create_signal_label_tensor_or_ndarray(
+                df, soft_label_mode, self._signal_label_col
+            )
+        )
+
+        (
+            self._repr_train_dataloader_idx,
+            self._repr_valid_dataloader_idx,
+            self._signal_train_dataloader_idx,
+            self._signal_total_dataloader_idx,
+            self._event_idx,
+        ) = self._create_indices(
+            df,
+            train_date_range,
+            valid_date_range,
+            signal_stop_trade_after_n_min,
+            signal_trade_between_hours,
+            lookback_event_only,
+        )
+
+        INIT_MSG_BUFFER += "\n" + "-" * 110
+        logging.info(INIT_MSG_BUFFER)
+        INIT_MSG_BUFFER = ""
+
+    def _create_factor_tensor(
+        self, df: pd.DataFrame, factor_cols: pd.MultiIndex
+    ) -> torch.Tensor:
+        return torch.from_numpy(df[factor_cols].to_numpy(dtype=np.float32))
+
+    def _create_timeindex_tensor(self, df: pd.DataFrame) -> torch.Tensor:
+        return torch.from_numpy(df.index.values.astype("int64"))
+
+    def _create_signal_label_tensor_or_ndarray(
+        self,
+        df: pd.DataFrame,
+        soft_label_mode: str,
+        signal_label_col: tuple[str, str],
+    ) -> torch.Tensor | np.ndarray:
+        signal_labels = df[signal_label_col].to_numpy()
+
+        if soft_label_mode == "fixed":
+            signal_labels = np.stack(
+                [self._create_soft_label(lbl) for lbl in signal_labels]
+            )
+            signal_label_tensor_or_ndarray = torch.from_numpy(
+                signal_labels.astype(np.float32)
+            )
+        elif soft_label_mode == "dynamic":
+            signal_label_tensor_or_ndarray = signal_labels
+
+        return signal_label_tensor_or_ndarray
+
+    def _create_repr_label_tensor(
+        self, df: pd.DataFrame, factor_cols: pd.MultiIndex
+    ) -> torch.Tensor:
+        return torch.from_numpy(df[factor_cols].to_numpy(dtype=np.float32))
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return self._df
+
+    @property
+    def factor_cols(self) -> pd.MultiIndex:
+        return self._factor_cols
+
+    @property
+    def geneventfilter_name(self) -> str:
+        return self._geneventfilter_name
+
+    @property
+    def repr_train_dataloader_idx(self) -> list[int]:
+        return self._repr_train_dataloader_idx
+
+    @property
+    def repr_valid_dataloader_idx(self) -> list[int]:
+        return self._repr_valid_dataloader_idx
+
+    @property
+    def signal_train_dataloader_idx(self) -> list[int]:
+        return self._signal_train_dataloader_idx
+
+    @property
+    def signal_total_dataloader_idx(self) -> list[int]:
+        return self._signal_total_dataloader_idx
+
+    def _add_adj_option_cols(self, df: pd.DataFrame) -> pd.DataFrame:
+        opt_mask = df.columns.get_level_values(0).str.startswith("m0s_top")
+        opt_df = df.loc[:, opt_mask].copy()
+        opt_df.columns = ["__".join(col) for col in opt_df.columns.to_flat_index()]
+        col_map = {col: i for i, col in enumerate(opt_df.columns)}
+
+        for ohlc in ["OPEN", "HIGH", "LOW", "CLOSE"]:
+            price = df[getattr(DFKey, f"FUTURE_PRICE_{ohlc}")].values
+
+            call_strike = df[
+                getattr(DFKey, f"M0S_TOP_TX_201_STRIKE_PRICE_{ohlc}")
+            ].values
+            put_strike = df[
+                getattr(DFKey, f"M0S_TOP_TX_301_STRIKE_PRICE_{ohlc}")
+            ].values
+
+            call_gap = np.round((price - call_strike) / 2.5).astype(int)
+            put_gap = np.round((price - put_strike) / 2.5).astype(int)
+
+            n = len(df)
+            offsets = np.arange(5)
+
+            if (call_gap_over_20 := (abs(call_gap) > 20).sum()) > 0:
+                logging.warning(
+                    f"# of abs(call_gap) > 20 at {ohlc}: {call_gap_over_20} --- will be clipped to +-20"
+                )
+            if (put_gap_over_20 := (abs(put_gap) > 20).sum()) > 0:
+                logging.warning(
+                    f"# of abs(put_gap) > 20 at {ohlc}: {put_gap_over_20} --- will be clipped to +-20"
+                )
+
+            call_gaps = np.clip((call_gap[:, None] + offsets[None, :]), -20, 20)
+            put_gaps = np.clip((put_gap[:, None] + offsets[None, :]), -20, 20)
+
+            for i in range(5):
+                cg = call_gaps[:, i]
+                pg = put_gaps[:, i]
+
+                for cat in ["price", "openint", "tx_amt", "tx_vol"]:
+                    if (
+                        cat.startswith("tx_") and not ohlc == "close"
+                    ):  # amt and vol at close will used only
+                        continue
+
+                    call_col_tgt = getattr(
+                        DFKey, f"ADJ_CALL_{i+1}_{cat.replace('tx_', '').upper()}_{ohlc}"
+                    )
+                    put_col_tgt = getattr(
+                        DFKey, f"ADJ_PUT_{i+1}_{cat.replace('tx_', '').upper()}_{ohlc}"
+                    )
+
+                    call_vals = np.empty(n, dtype=float)
+                    put_vals = np.empty(n, dtype=float)
+
+                    for idx in range(n):
+                        call_col = f"m0s_top_tx_201_{cg[idx]:+d}_{cat}__{ohlc.lower()}"
+                        put_col = f"m0s_top_tx_301_{pg[idx]:+d}_{cat}__{ohlc.lower()}"
+
+                        call_vals[idx] = opt_df.values[idx, col_map[call_col]]
+                        put_vals[idx] = opt_df.values[idx, col_map[put_col]]
+
+                    df[call_col_tgt] = call_vals
+                    df[put_col_tgt] = put_vals
+
+        return df
+
+    def _set_execution_price(
+        self, df: pd.DataFrame
+    ) -> tuple[pd.DataFrame, tuple[str, str]]:
+        df[DFKey.PRICE_EXECUTION] = (
+            df.groupby(df.index.date)[[DFKey.FUTURE_PRICE_OPEN]].shift(-1).ffill()
+        )
+        return df, DFKey.PRICE_EXECUTION
+
+    def set_learning_stage(
+        self, learning_stage: Literal["repr", "signal", "signal_wo_repr"]
+    ) -> None:
+        self._learning_stage = learning_stage
+
+    def _create_indices(
+        self,
+        df: pd.DataFrame,
+        train_date_range: tuple[str, str],
+        valid_date_range: tuple[str, str],
+        signal_stop_trade_after_n_min: int | None,
+        signal_trade_between_hours: tuple[str, str] | None,
+        lookback_event_only: bool,
+    ) -> tuple[list[int], list[int], list[int], list[int], list[int]]:
+
+        total_df = df.iloc[self._repr_lookback_num - 1 : -self._repr_lookahead_num]
+        train_df = self._filter_by_date_range(df, train_date_range).iloc[
+            self._repr_lookback_num - 1 : -self._repr_lookahead_num
+        ]
+        valid_df = self._filter_by_date_range(df, valid_date_range).iloc[
+            self._repr_lookback_num - 1 : -self._repr_lookahead_num
+        ]
+
+        train_df_stop_trade = self._filter_trade_by_time(
+            train_df, signal_stop_trade_after_n_min, signal_trade_between_hours
+        )
+        total_df_stop_trade = self._filter_trade_by_time(
+            total_df, signal_stop_trade_after_n_min, signal_trade_between_hours
+        )
+
+        total_event_df = total_df[total_df[DFKey.EVENT_MASK]]
+
+        if lookback_event_only:
+
+            def _slice_event_lookback(src_df, repr_total_event_df):
+                return src_df.index.intersection(repr_total_event_df.index)[
+                    self._repr_lookback_num - 1 :
+                ]
+
+            repr_train_df_idx = _slice_event_lookback(train_df, total_event_df)
+            repr_valid_df_idx = _slice_event_lookback(valid_df, total_event_df)
+            signal_train_df_idx = _slice_event_lookback(
+                train_df_stop_trade, total_event_df
+            )
+            signal_total_df_idx = _slice_event_lookback(
+                total_df_stop_trade, total_event_df
+            )
+        else:
+            repr_train_df_idx = train_df.index
+            repr_valid_df_idx = valid_df.index
+            signal_train_df_idx = train_df_stop_trade.index
+            signal_total_df_idx = total_df_stop_trade.index
+
+        repr_train_dataloader_idx = df.index.get_indexer(repr_train_df_idx)
+        repr_valid_dataloader_idx = df.index.get_indexer(repr_valid_df_idx)
+        signal_train_dataloader_idx = df.index.get_indexer(signal_train_df_idx)
+        signal_total_dataloader_idx = df.index.get_indexer(signal_total_df_idx)
+        event_idx = df.index.get_indexer(total_event_df.index)
+
+        global INIT_MSG_BUFFER
+        INIT_MSG_BUFFER += (
+            f"\nFull DataFrame Shape: {self._df.shape}\n"
+            f"  > # of repr_train_sample: {len(repr_train_dataloader_idx)} / {len(train_df)}\n"
+            f"  > # of repr_valid_sample: {len(repr_valid_dataloader_idx)} / {len(valid_df)}\n"
+            f"  > # of signal_train_sample: {len(signal_train_dataloader_idx)} / {len(train_df)}\n"
+            f"  > # of signal_total_sample: {len(signal_total_dataloader_idx)} / {len(total_df)}\n"
+        )
+
+        return (
+            repr_train_dataloader_idx,
+            repr_valid_dataloader_idx,
+            signal_train_dataloader_idx,
+            signal_total_dataloader_idx,
+            event_idx,
+        )
+
+    def _gumbel_noise(self, shape: tuple[int, ...]) -> np.ndarray:
+        U = np.random.uniform(0, 1, shape)
+        return -np.log(-np.log(U + Num.EPS) + Num.EPS)
+
+    def _softmax(self, x: np.ndarray, tau: float) -> np.ndarray:
+        exp_x = np.exp((x - np.max(x)) / tau)
+        return exp_x / exp_x.sum(axis=-1, keepdims=True)
+
+    def _create_soft_label(self, label: np.ndarray) -> np.ndarray:
+        pos_criterion = abs(label)
+
+        if label > self._soft_label_hold_thresh:
+            label_ = [0, self._soft_label_hold_thresh, pos_criterion]
+        elif label < -self._soft_label_hold_thresh:
+            label_ = [pos_criterion, self._soft_label_hold_thresh, 0]
+        else:
+            label_ = [0, self._soft_label_hold_thresh, 0]
+
+        label = np.array(label_).astype(np.float32)
+        label = label + self._gumbel_noise(label.shape)
+        label = self._softmax(label, tau=self._soft_label_tau)
+        return label
+
+    def _filter_trade_by_time(
+        self,
+        df: pd.DataFrame,
+        stop_trade_after_n_min: int | None,
+        signal_trade_between_hours: tuple[str, str] | None,
+    ) -> pd.DataFrame:
+        if stop_trade_after_n_min is None and signal_trade_between_hours is None:
+            return df
+
+        mask = pd.Series(False, index=df.index)
+
+        if signal_trade_between_hours is not None:
+            start_hour, end_hour = signal_trade_between_hours
+            mask |= (df.index.hour >= start_hour) & (df.index.hour <= end_hour)
+
+        if stop_trade_after_n_min is not None:
+            first_times = df.groupby(df.index.date).apply(lambda g: g.index.min())
+            for _, first_time in first_times.items():
+                start = first_time
+                end = start + pd.Timedelta(minutes=stop_trade_after_n_min)
+                mask |= (df.index >= start) & (df.index <= end)
+
+        return df[mask].copy()
+
+    def _add_signal_label_col(
+        self,
+        df: pd.DataFrame,
+        signal_label_type: str,
+    ) -> tuple[pd.DataFrame, tuple[str, str]]:
+        if signal_label_type.startswith("sharpe_to"):
+            profits = (
+                df.groupby(df.index.date)[[DFKey.PRICE_EXECUTION]]
+                .diff()
+                .shift(-1)
+                .fillna(0)
+            )
+            if np.isnan(profits.values).any():
+                raise ValueError(f"Found nan in profits: {profits}")
+
+            sharpe_to = signal_label_type.split("sharpe_to_")[-1]
+            if sharpe_to == "eod":
+                window_size = -1
+            else:
+                try:
+                    window_size = max(
+                        1, int(sharpe_to) // RESAMPLE_RULE_TO_MIN[self._resample_rule]
+                    )
+                except ValueError:
+                    raise ValueError(f"Invalid signal_label_type: '{sharpe_to}'")
+
+            df[DFKey.SHARPE_TO_X_MIN] = np.nan
+            for _, idx in df.groupby(df.index.date).groups.items():
+                daily_profit = profits.loc[idx].values.flatten()
+                sharpe = sharpe_to_n_min_numba(daily_profit, window_size, Num.EPS)
+                df.loc[idx, DFKey.SHARPE_TO_X_MIN] = sharpe
+            return df, DFKey.SHARPE_TO_X_MIN
+
+        elif signal_label_type == "profit_at_market_close":
+            df[DFKey.PROFIT_AT_MARKET_CLOSE] = df.groupby(df.index.date)[
+                [DFKey.FUTURE_PRICE_CLOSE]
+            ].transform(lambda x: x.iloc[-1] - x)
+            return df, DFKey.PROFIT_AT_MARKET_CLOSE
+
+        else:
+            raise ValueError(f"Invalid signal label type: {signal_label_type}")
+
+    def _scale_input_factors_by_train_date_range(
+        self,
+        df: pd.DataFrame,
+        cols_to_scale: pd.MultiIndex,
+        train_date_range: tuple[str, str],
+    ) -> pd.DataFrame:
+        train_df = self._filter_by_date_range(df, train_date_range)
+        scaler = StandardScaler()
+        scaler.fit(train_df[cols_to_scale].values)
+        df[cols_to_scale] = scaler.transform(df[cols_to_scale].values)
+        return df
+
+    def _drop_unused_rows(
+        self, df: pd.DataFrame, subset_cols: pd.MultiIndex
+    ) -> pd.DataFrame:
+        n_rows_before = len(df)
+        df = df.dropna(subset=subset_cols).copy()
+        n_rows_after = len(df)
+
+        global INIT_MSG_BUFFER
+        INIT_MSG_BUFFER += f"\nDropped {n_rows_before - n_rows_after} rows during Dataset._drop_unused_rows()"
+        return df
+
+    def _drop_unused_cols(
+        self, df: pd.DataFrame, cols_to_keep: list[str | tuple[str, str]]
+    ) -> pd.DataFrame:
+        unused_cols = df.columns
+        unused_cols = unused_cols.difference(cols_to_keep)
+
+        global INIT_MSG_BUFFER
+        INIT_MSG_BUFFER += (
+            f"\nDropped {len(unused_cols)} cols during Dataset._drop_unused_cols()"
+        )
+        return df.drop(columns=unused_cols).copy()
+
+    def _filter_by_date_range(
+        self, df: pd.DataFrame, date_range: tuple[str, str]
+    ) -> pd.DataFrame:
+        start, end = date_range
+        time = df.index
+        df = df[(start <= time) & (time <= end)].copy()
+        return df
+
+    def _load_data(
+        self,
+        data_fp: str | Path,
+        ta_factorset_fp: str | None,
+        total_date_range: tuple[str, str],
+        resample_rule: str,
+        geneventfilter: DictConfig,
+    ) -> tuple[pd.DataFrame, pd.MultiIndex, str]:
+        data = pd.read_parquet(data_fp)
+
+        data = data[data[DFKey.RESAMPLE_RULE] == resample_rule].copy()
+        data = self._filter_by_date_range(data, total_date_range)
+
+        ta_cols = []
+        if ta_factorset_fp is not None:
+            factorset = torch.load(ta_factorset_fp, weights_only=False)
+            data, ta_cols = add_ta(data, factorset)
+
+        """ REMOVE THIS AFTER DEBUGGING
+        data = self._add_adj_option_cols(data).copy()
+        REMOVE THIS AFTER DEBUGGING """
+
+        geneventfilter = build_geneventfilter(geneventfilter)
+
+        global INIT_MSG_BUFFER
+        INIT_MSG_BUFFER += f"\n[GenEventFilter: {geneventfilter.name_with_params}]"
+
+        data, cols_used_for_filtering = geneventfilter.add_event_mask(data)
+
+        if self._input_cols_used_in_geneventfilter:
+            factor_cols = ta_cols + cols_used_for_filtering
+        else:
+            factor_cols = ta_cols
+
+        if len(factor_cols) == 0:
+            raise ValueError(
+                "No input columns (both ta_factor and cols_used_for_filtering are empty)"
+            )
+
+        return (
+            data,
+            pd.MultiIndex.from_tuples(factor_cols),
+            geneventfilter.name_with_params,
+        )
+
+    def _getitem_repr(
+        self, idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self._lookback_event_only:
+            event_idx = np.where(self._event_idx == idx)[0][0]
+            idx_slice = self._event_idx[
+                event_idx - self._repr_lookback_num + 1 : event_idx + 1
+            ]
+            inputs = self._factor_tensor[idx_slice]
+        else:
+            inputs = self._factor_tensor[idx - self._repr_lookback_num + 1 : idx + 1]
+        labels = self._factor_tensor[idx + 1 : idx + self._repr_lookahead_num + 1]
+        timeindex = self._timeindex_tensor[idx]
+        return inputs, labels, timeindex
+
+    def _getitem_signal(
+        self, idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self._lookback_event_only:
+            event_idx = np.where(self._event_idx == idx)[0][0]
+            idx_slice = self._event_idx[
+                event_idx - self._repr_lookback_num + 1 : event_idx + 1
+            ]
+            inputs = self._factor_tensor[idx_slice]
+        else:
+            inputs = self._factor_tensor[idx - self._repr_lookback_num + 1 : idx + 1]
+
+        if self._soft_label_mode == "fixed":
+            labels = self._signal_label_tensor_or_ndarray[idx]
+        elif self._soft_label_mode == "dynamic":
+            labels = self._create_soft_label(self._signal_label_tensor_or_ndarray[idx])
+        else:
+            raise ValueError(f"Invalid soft label mode: {self._soft_label_mode}")
+
+        timeindex = self._timeindex_tensor[idx]
+        return inputs, labels, timeindex
+
+    def _getitem_signal_wo_repr(
+        self, idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        inputs = self._factor_tensor[idx]
+        labels = self._signal_label_tensor_or_ndarray[idx]
+        timeindex = self._timeindex_tensor[idx]
+        return inputs, labels, timeindex
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self._learning_stage == "repr":
+            return self._getitem_repr(idx)
+        elif self._learning_stage == "signal":
+            return self._getitem_signal(idx)
+        elif self._learning_stage == "signal_wo_repr":
+            return self._getitem_signal_wo_repr(idx)
+        else:
+            raise ValueError(f"Invalid learning stage: {self._learning_stage}")
+
+    def __len__(self) -> None:
+        pass  # will be defined in Subset(); See datamodule.py

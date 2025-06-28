@@ -52,11 +52,11 @@ class ATRI(GenFactor):
         df_tmp["past_net_flow"] = df_tmp["net_flow"].shift(sp["reaction_window"])
 
         # 3. Order Book Reaction: reaction *after* impulse
-        df_tmp["buy_1_diff"] = df_tmp[DFKey.BUY_ORDER_1_CLOSE] - df_tmp[
-            DFKey.BUY_ORDER_1_CLOSE
+        df_tmp["buy_1_diff"] = df_tmp[DFKey.BUY_ORDER_1_QTY_CLOSE] - df_tmp[
+            DFKey.BUY_ORDER_1_QTY_CLOSE
         ].shift(sp["reaction_window"])
-        df_tmp["sell_1_diff"] = df_tmp[DFKey.SELL_ORDER_1_CLOSE] - df_tmp[
-            DFKey.SELL_ORDER_1_CLOSE
+        df_tmp["sell_1_diff"] = df_tmp[DFKey.SELL_ORDER_1_QTY_CLOSE] - df_tmp[
+            DFKey.SELL_ORDER_1_QTY_CLOSE
         ].shift(sp["reaction_window"])
 
         # 4. Adaptive threshold for pulse detection

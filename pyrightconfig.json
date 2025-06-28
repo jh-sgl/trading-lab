@@ -1,0 +1,12 @@
+{
+  "exclude": [
+    "**/__pycache__",
+    "**/external",
+    "*.png",
+    "./data/",
+    "*.ipynb",
+    "*.pth",
+    "*.c",
+    "*.o"
+  ]
+}

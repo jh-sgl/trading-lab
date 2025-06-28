@@ -34,38 +34,38 @@ class OBGI(GenFactor):
 
         # Mid price
         mid_price = (
-            df_tmp[DFKey.SELL_ORDER_1_CLOSE] + df_tmp[DFKey.BUY_ORDER_1_CLOSE]
+            df_tmp[DFKey.SELL_ORDER_1_QTY_CLOSE] + df_tmp[DFKey.BUY_ORDER_1_QTY_CLOSE]
         ) / 2
 
         # Gradient imbalance
         obgi_raw = 0
         buy_order_dfkeys = [
-            DFKey.BUY_ORDER_1_CLOSE,
-            DFKey.BUY_ORDER_2_CLOSE,
-            DFKey.BUY_ORDER_3_CLOSE,
-            DFKey.BUY_ORDER_4_CLOSE,
-            DFKey.BUY_ORDER_5_CLOSE,
+            DFKey.BUY_ORDER_1_QTY_CLOSE,
+            DFKey.BUY_ORDER_2_QTY_CLOSE,
+            DFKey.BUY_ORDER_3_QTY_CLOSE,
+            DFKey.BUY_ORDER_4_QTY_CLOSE,
+            DFKey.BUY_ORDER_5_QTY_CLOSE,
         ]
         sell_order_dfkeys = [
-            DFKey.SELL_ORDER_1_CLOSE,
-            DFKey.SELL_ORDER_2_CLOSE,
-            DFKey.SELL_ORDER_3_CLOSE,
-            DFKey.SELL_ORDER_4_CLOSE,
-            DFKey.SELL_ORDER_5_CLOSE,
+            DFKey.SELL_ORDER_1_QTY_CLOSE,
+            DFKey.SELL_ORDER_2_QTY_CLOSE,
+            DFKey.SELL_ORDER_3_QTY_CLOSE,
+            DFKey.SELL_ORDER_4_QTY_CLOSE,
+            DFKey.SELL_ORDER_5_QTY_CLOSE,
         ]
         buy_order_price_dfkeys = [
-            DFKey.BUY_ORDER_1_PRICE,
-            DFKey.BUY_ORDER_2_PRICE,
-            DFKey.BUY_ORDER_3_PRICE,
-            DFKey.BUY_ORDER_4_PRICE,
-            DFKey.BUY_ORDER_5_PRICE,
+            DFKey.BUY_ORDER_1_PRICE_CLOSE,
+            DFKey.BUY_ORDER_2_PRICE_CLOSE,
+            DFKey.BUY_ORDER_3_PRICE_CLOSE,
+            DFKey.BUY_ORDER_4_PRICE_CLOSE,
+            DFKey.BUY_ORDER_5_PRICE_CLOSE,
         ]
         sell_order_price_dfkeys = [
-            DFKey.SELL_ORDER_1_PRICE,
-            DFKey.SELL_ORDER_2_PRICE,
-            DFKey.SELL_ORDER_3_PRICE,
-            DFKey.SELL_ORDER_4_PRICE,
-            DFKey.SELL_ORDER_5_PRICE,
+            DFKey.SELL_ORDER_1_PRICE_CLOSE,
+            DFKey.SELL_ORDER_2_PRICE_CLOSE,
+            DFKey.SELL_ORDER_3_PRICE_CLOSE,
+            DFKey.SELL_ORDER_4_PRICE_CLOSE,
+            DFKey.SELL_ORDER_5_PRICE_CLOSE,
         ]
 
         obgi_raw = 0

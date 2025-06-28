@@ -44,18 +44,18 @@ class OrderBookLag(GenFactor):
         df_tmp = df.copy()
 
         buy_orderbook_key_list = [
-            DFKey.BUY_ORDER_1_CLOSE,
-            DFKey.BUY_ORDER_2_CLOSE,
-            DFKey.BUY_ORDER_3_CLOSE,
-            DFKey.BUY_ORDER_4_CLOSE,
-            DFKey.BUY_ORDER_5_CLOSE,
+            DFKey.BUY_ORDER_1_QTY_CLOSE,
+            DFKey.BUY_ORDER_2_QTY_CLOSE,
+            DFKey.BUY_ORDER_3_QTY_CLOSE,
+            DFKey.BUY_ORDER_4_QTY_CLOSE,
+            DFKey.BUY_ORDER_5_QTY_CLOSE,
         ]
         sell_orderbook_key_list = [
-            DFKey.SELL_ORDER_1_CLOSE,
-            DFKey.SELL_ORDER_2_CLOSE,
-            DFKey.SELL_ORDER_3_CLOSE,
-            DFKey.SELL_ORDER_4_CLOSE,
-            DFKey.SELL_ORDER_5_CLOSE,
+            DFKey.SELL_ORDER_1_QTY_CLOSE,
+            DFKey.SELL_ORDER_2_QTY_CLOSE,
+            DFKey.SELL_ORDER_3_QTY_CLOSE,
+            DFKey.SELL_ORDER_4_QTY_CLOSE,
+            DFKey.SELL_ORDER_5_QTY_CLOSE,
         ]
 
         df_tmp["buy_orderbook_lag"] = 0
