@@ -9,3 +9,4 @@ __pycache__
 failed_experiments.txt
 **/external/**/results
 **/external/**/data
+/*.txt

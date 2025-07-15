@@ -1,0 +1,45 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v1_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: IMRI
+    args:
+      shock_quantile: 0.9
+      shock_lookback: 10
+      normalization_window: 30
+      price_weight: 0.6
+      liquidity_weight: 0.3
+      reversion_weight: 0.1
+      imri_window: 3
+  - name: IMRI
+    args:
+      shock_quantile: 0.8
+      shock_lookback: 20
+      normalization_window: 30
+      price_weight: 0.5
+      liquidity_weight: 0.2
+      reversion_weight: 0.2
+      imri_window: 3
+  - name: IMRI
+    args:
+      shock_quantile: 0.9
+      shock_lookback: 20
+      normalization_window: 60
+      price_weight: 0.5
+      liquidity_weight: 0.2
+      reversion_weight: 0.1
+      imri_window: 3
+  - name: IMRI
+    args:
+      shock_quantile: 0.95
+      shock_lookback: 5
+      normalization_window: 60
+      price_weight: 0.5
+      liquidity_weight: 0.3
+      reversion_weight: 0.2
+      imri_window: 5

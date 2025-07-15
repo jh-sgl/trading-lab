@@ -1,7 +1,7 @@
 #!/bin/bash
 RUN_NAME_PREFIX="multirun_18_taonly_dlinear"
 
-MAX_JOBS=25
+MAX_JOBS=30
 MAX_RETRIES=10
 SLEEP_BETWEEN_JOBS=45
 JOB_COUNT=0

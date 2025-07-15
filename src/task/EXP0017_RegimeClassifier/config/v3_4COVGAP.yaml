@@ -1,0 +1,41 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: COVGAP
+    args:
+      iv_source: iv_slope
+      iv_normalization_type: rolling_diff
+      iv_normalization_window: 10
+      macro_component: bond_spread
+      macro_window: 20
+      weight_scheme: custom_regime
+  - name: COVGAP
+    args:
+      iv_source: put_iv
+      iv_normalization_type: rolling_diff
+      iv_normalization_window: 20
+      macro_component: bond_spread
+      macro_window: 20
+      weight_scheme: custom_regime
+  - name: COVGAP
+    args:
+      iv_source: put_iv
+      iv_normalization_type: rolling_diff
+      iv_normalization_window: 20
+      macro_component: usd_delta
+      macro_window: 5
+      weight_scheme: volatility_scaled
+  - name: COVGAP
+    args:
+      iv_source: put_iv
+      iv_normalization_type: rolling_diff
+      iv_normalization_window: 10
+      macro_component: usd_delta
+      macro_window: 5
+      weight_scheme: custom_regime

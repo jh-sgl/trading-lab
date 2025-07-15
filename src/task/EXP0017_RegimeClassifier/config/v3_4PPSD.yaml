@@ -1,0 +1,25 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: PPSD
+    args:
+      momentum_window: 10
+      correlation_window: 12
+  - name: PPSD
+    args:
+      momentum_window: 20
+      correlation_window: 48
+  - name: PPSD
+    args:
+      momentum_window: 5
+      correlation_window: 48
+  - name: PPSD
+    args:
+      momentum_window: 1
+      correlation_window: 48

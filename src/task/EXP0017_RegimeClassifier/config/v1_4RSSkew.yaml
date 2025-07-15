@@ -1,0 +1,25 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v1_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: RSSkew
+    args:
+      skew_window: 30
+      norm_window: 30
+  - name: RSSkew
+    args:
+      skew_window: 5
+      norm_window: 30
+  - name: RSSkew
+    args:
+      skew_window: 20
+      norm_window: 10
+  - name: RSSkew
+    args:
+      skew_window: 30
+      norm_window: 10

@@ -1,0 +1,37 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: HSFI
+    args:
+      hsfi_window: 10
+      flicker_window: 2
+      bfr_weight: 0.3
+      ird_weight: 0.7
+      ttmr_weight: 0.5
+  - name: HSFI
+    args:
+      hsfi_window: 1
+      flicker_window: 3
+      bfr_weight: 0.3
+      ird_weight: 0.7
+      ttmr_weight: 0.7
+  - name: HSFI
+    args:
+      hsfi_window: 5
+      flicker_window: 2
+      bfr_weight: 0.3
+      ird_weight: 0.5
+      ttmr_weight: 0.3
+  - name: HSFI
+    args:
+      hsfi_window: 10
+      flicker_window: 2
+      bfr_weight: 0.3
+      ird_weight: 0.5
+      ttmr_weight: 0.7

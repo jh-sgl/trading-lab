@@ -1,0 +1,41 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: RIVP
+    args:
+      vol_window: 5
+      vol_slope_window: 10
+      pivot_window: 15
+      pivot_margin: 5
+      atr_window: 10
+      norm_window: 60
+  - name: RIVP
+    args:
+      vol_window: 5
+      vol_slope_window: 10
+      pivot_window: 10
+      pivot_margin: 2
+      atr_window: 10
+      norm_window: 20
+  - name: RIVP
+    args:
+      vol_window: 10
+      vol_slope_window: 10
+      pivot_window: 5
+      pivot_margin: 3
+      atr_window: 20
+      norm_window: 30
+  - name: RIVP
+    args:
+      vol_window: 20
+      vol_slope_window: 5
+      pivot_window: 15
+      pivot_margin: 2
+      atr_window: 20
+      norm_window: 30

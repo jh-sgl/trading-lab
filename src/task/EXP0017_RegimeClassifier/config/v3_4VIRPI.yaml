@@ -1,0 +1,25 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: VIRPI
+    args:
+      virpi_window: 60
+      vkospi_lookback: 390
+  - name: VIRPI
+    args:
+      virpi_window: 60
+      vkospi_lookback: 90
+  - name: VIRPI
+    args:
+      virpi_window: 1
+      vkospi_lookback: 30
+  - name: VIRPI
+    args:
+      virpi_window: 20
+      vkospi_lookback: 390

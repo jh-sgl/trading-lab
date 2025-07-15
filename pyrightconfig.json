@@ -7,6 +7,18 @@
     "*.ipynb",
     "*.pth",
     "*.c",
-    "*.o"
+    "*.o",
+    "**/.venv",
+    "**/env",
+    "**/logs",
+    "**/checkpoints",
+    "**/build",
+    "**/dist",
+    "**/.git",
+    "**/outputs",
+  ],
+  "include": [
+    "src", "misc"
   ]
+
 }

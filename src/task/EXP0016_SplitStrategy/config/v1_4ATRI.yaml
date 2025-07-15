@@ -1,0 +1,33 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v1_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: ATRI
+    args:
+      reaction_window: 5
+      normalization_window: 60
+      flow_quantile: 0.95
+      quantile_window_factor: 10
+  - name: ATRI
+    args:
+      reaction_window: 5
+      normalization_window: 90
+      flow_quantile: 0.9
+      quantile_window_factor: 10
+  - name: ATRI
+    args:
+      reaction_window: 5
+      normalization_window: 90
+      flow_quantile: 0.9
+      quantile_window_factor: 5
+  - name: ATRI
+    args:
+      reaction_window: 3
+      normalization_window: 90
+      flow_quantile: 0.8
+      quantile_window_factor: 10

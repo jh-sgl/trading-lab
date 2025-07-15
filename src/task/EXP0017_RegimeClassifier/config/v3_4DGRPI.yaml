@@ -1,0 +1,37 @@
+hydra:
+  run:
+    dir: ./src/task/EXP0014_GenFactorRepr/outputs/${now:%Y-%m-%d}/${exp_name}/${now:%H-%M-%S}
+
+defaults:
+  - v3_lastv4_nogenfactors
+  - _self_
+
+gen_factorset:
+  - name: DGRPI
+    args:
+      gamma_oi_weight: 0.3
+      delta_oi_weight: 0.1
+      price_return_window: 5
+      strike_spacing: 5
+      ma_window: 1
+  - name: DGRPI
+    args:
+      gamma_oi_weight: 0.5
+      delta_oi_weight: 0.3
+      price_return_window: 5
+      strike_spacing: 10
+      ma_window: 1
+  - name: DGRPI
+    args:
+      gamma_oi_weight: 0.7
+      delta_oi_weight: 0.7
+      price_return_window: 5
+      strike_spacing: 5
+      ma_window: 10
+  - name: DGRPI
+    args:
+      gamma_oi_weight: 1.0
+      delta_oi_weight: 0.7
+      price_return_window: 1
+      strike_spacing: 10
+      ma_window: 1

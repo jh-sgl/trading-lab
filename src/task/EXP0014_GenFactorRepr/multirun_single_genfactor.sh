@@ -1,37 +1,64 @@
 #!/bin/bash
 RUN_NAME_PREFIX="multirun_19_dlinear_ta+"
 
-MAX_JOBS=25
-MAX_RETRIES=10
-SLEEP_BETWEEN_JOBS=45
+MAX_JOBS=32
+MAX_RETRIES=3
+SLEEP_BETWEEN_JOBS=23
 JOB_COUNT=0
 
 GENFACTORSETS=(
-  "VSHPI"
-  "RCPSkew"
-  "AOC"
-  "StraddleImbalance"
-  "VolCR"
-  "OIBreak"
-  "adjo_IVSS"
-  "adjo_OVT"
-  "adjo_SDPR"
-  "adjo_ODMC"
-  "adjo_AORPA"
-  "adjo_CCD"
-  "adjo_TSCS"
-  "adjo_TTop"
-  "adjo_BWOP"
-  "adjo_VAOMI"
-  "adjo_GPB"
-  "IBLSI"
-  "OBPD"
+  # "putcall_oi_delta"
+  # "putcall_2nd_oi_delta"
+  # "putcall_oi_skew"
+  # "putcall_iv_skew_slope"
+  # "putcall_delta_imbalance"
+  # "gamma_wall_pressure"
+  # "macro_divergence"
+  # "bond_3y_shock"
+  # "bond_10y_shock"
+  # "usd_shock"
+  # "trade_pulse"
+  # "orderbook_lag"
+  # "bti"
+  # "bsfs"
+  # "ird"
+  # "participant_corr"
+  # "ttmr"
+  # "theory_deviation"
+  # "normalized_basis"
+  # "vkospi_zscore"
+  # "book_flicker_rate"
+  # "vanna_pressure"
+  # "VSHPI"
+  # "RCPSkew"
+  # "AOC"
+  # "StraddleImbalance"
+  # "VolCR"
+  # "OIBreak"
+  # "adjo_IVSS"
+  # "adjo_OVT"
+  # "adjo_SDPR"
+  # "adjo_ODMC"
+  # "adjo_AORPA"
+  # "adjo_CCD"
+  # "adjo_TSCS"
+  # "adjo_TTop"
+  # "adjo_BWOP"
+  # "adjo_VAOMI"
+  # "adjo_GPB"
+  # "IBLSI"
+  # "OBPD"
   # "adjo_LVI"
-  "adjo_CDI"
-  "LSOFI" "COVGAP" "DGRPI" "LSI" "CPI" "HSFI"
-  "VIRPI" "IMRI" "ATRI"
-  "RIVP" "RSSkew" "ISSM" "PPSD"
-  "PLDI" "CASI" "OBGI"
+  # "adjo_CDI"
+  # "LSOFI" "COVGAP" "DGRPI" "LSI" "CPI" "HSFI"
+  # "VIRPI" "IMRI" "ATRI"
+  # "RIVP" "RSSkew" "ISSM" "PPSD"
+  # "PLDI" "CASI" "OBGI"
+  # "adjo_ODI"
+  # "adjo_PCOCD"
+  # "adjo_PCODS"
+  # "adjo_PCOS"
+  "adjo_PutCall_OI_Skew"
 )  # Add your factor names here
 
 # GENFACTORSETS=("theory_deviation")
@@ -63,7 +90,7 @@ run_job() {
     echo "🚴‍♀️ Running $exp_name with $genfactorset (Attempt $attempt)"
     echo
     python -m task.EXP0014_GenFactorRepr.train \
-      --config-name=v3_lastv4_nogenfactors \
+      --config-name=v1_nogenfactors \
       exp_name=${run_name}/${exp_name} \
       input_dim=24 \
       ta_factorset_fp=/data/jh/repo/trading-lab/src/task/EXP0014_GenFactorRepr/external/results/factorset/${exp_name}.pt \
